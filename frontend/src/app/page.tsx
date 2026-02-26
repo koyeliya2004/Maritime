@@ -116,7 +116,7 @@ export default function Home() {
           </span>
         </div>
         <span className="hidden sm:block text-xs text-gray-500 font-mono tracking-wider">
-          Acoustic-Visual Forensics &amp; Threat Relay
+          Acoustic-Visual Forensics & Threat Relay
         </span>
         <div className="ml-auto flex items-center gap-2">
           <span className="text-xs font-mono text-threat-low animate-slow-pulse">● LIVE</span>
