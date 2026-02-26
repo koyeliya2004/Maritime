@@ -177,7 +177,8 @@ def build_heatmap(rgb: np.ndarray) -> str:
     ssim_norm = ((ssim_map + 1.0) / 2.0 * 255).clip(0, 255).astype(np.uint8)
 
     # Map to BGR: low similarity → red (forensic interest), high → green
-    heatmap_bgr = cv2.applyColorMap(ssim_norm, cv2.COLORMAP_RdYlGn if hasattr(cv2, "COLORMAP_RdYlGn") else cv2.COLORMAP_JET)
+    colormap = cv2.COLORMAP_RdYlGn if hasattr(cv2, "COLORMAP_RdYlGn") else cv2.COLORMAP_JET
+    heatmap_bgr = cv2.applyColorMap(ssim_norm, colormap)
 
     # Blend with original for context
     rgb_bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
