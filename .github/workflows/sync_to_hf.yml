@@ -1,0 +1,48 @@
+# .github/workflows/sync_to_hf.yml
+#
+# Syncs ONLY the /backend directory to a Hugging Face Space on every push to main.
+#
+# Required repository secrets:
+#   HF_TOKEN  – Hugging Face write token (https://huggingface.co/settings/tokens)
+#   HF_SPACE  – Space repo ID, e.g. "your-username/sub-sentinel"
+#
+# The frontend is NEVER included in the push.
+
+name: Sync backend to Hugging Face Space
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history needed for subtree operations
+
+      - name: Configure Git identity
+        run: |
+          git config user.email "ci-bot@sub-sentinel"
+          git config user.name  "SUB-SENTINEL CI Bot"
+
+      - name: Push /backend subtree to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ secrets.HF_SPACE }}
+        run: |
+          # Add the HF remote using the token for authentication
+          git remote add hf "https://user:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}"
+
+          # Use git subtree split to create an isolated branch containing ONLY
+          # the contents of /backend, then force-push it as the Space's main branch.
+          git subtree split --prefix backend -b hf-deploy
+
+          git push hf hf-deploy:main --force
