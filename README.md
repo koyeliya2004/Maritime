@@ -1,3 +1,13 @@
+---
+license: apache-2.0
+title: SUB-SENTINEL
+sdk: docker
+emoji: 🌍
+colorFrom: indigo
+colorTo: blue
+short_description: Acoustic-Visual Forensics & Threat Relay
+---
+
 # SUB-SENTINEL: Acoustic-Visual Forensics & Threat Relay
 
 A production-ready monorepo for underwater acoustic-visual forensics and threat detection.
