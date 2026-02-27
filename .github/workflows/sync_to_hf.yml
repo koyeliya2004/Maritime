@@ -1,6 +1,7 @@
 # .github/workflows/sync_to_hf.yml
 #
 # Syncs ONLY the /backend directory to a Hugging Face Space on every push to main.
+# Also copies the repository README into the Space so the README is kept in sync.
 #
 # Required repository secrets:
 #   HF_TOKEN  – Hugging Face write token (https://huggingface.co/settings/tokens)
@@ -16,6 +17,8 @@ on:
       - main
     paths:
       - "backend/**"
+      - "README.md"    # include README changes as a trigger (optional)
+      - "README"       # handle README without extension as well (optional)
 
 jobs:
   sync:
@@ -33,16 +36,39 @@ jobs:
           git config user.email "ci-bot@sub-sentinel"
           git config user.name  "SUB-SENTINEL CI Bot"
 
-      - name: Push /backend subtree to Hugging Face Space
+      - name: Build and push backend + README to Hugging Face Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_SPACE: ${{ secrets.HF_SPACE }}
         run: |
-          # Add the HF remote using the token for authentication
+          # Create a clean temporary directory to assemble the Space contents
+          TMPDIR=$(mktemp -d)
+          echo "Preparing deploy tree in $TMPDIR"
+
+          # Copy backend contents (only tracked files from working tree)
+          rsync -a --delete backend/ "$TMPDIR/"
+
+          # Copy README if present in repository root (handle README.md and README)
+          if [ -f README.md ]; then
+            cp README.md "$TMPDIR/README.md"
+          fi
+
+          if [ -f README ] && [ ! -f "$TMPDIR/README" ]; then
+            cp README "$TMPDIR/README"
+          fi
+
+          # Enter temp dir, init git and push to HF Space as its main branch
+          pushd "$TMPDIR"
+          git init
+          git checkout -b main || true
+          git config user.email "ci-bot@sub-sentinel"
+          git config user.name  "SUB-SENTINEL CI Bot"
+
+          git add --all
+          git commit -m "Deploy backend and README from ${GITHUB_SHA} [ci skip]" || true
+
+          # Add HF remote and push
           git remote add hf "https://user:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}"
+          git push hf main:main --force
 
-          # Use git subtree split to create an isolated branch containing ONLY
-          # the contents of /backend, then force-push it as the Space's main branch.
-          git subtree split --prefix backend -b hf-deploy
-
-          git push hf hf-deploy:main --force
+          popd
