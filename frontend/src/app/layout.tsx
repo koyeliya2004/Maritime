@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Toaster } from "react-hot-toast";
+import { NeonCursor } from "@/components/NeonCursor";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -17,6 +18,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="bg-panel text-gray-100 font-sans antialiased">
         {children}
+        <NeonCursor />
         <Toaster
           position="top-right"
           toastOptions={{

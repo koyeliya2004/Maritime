@@ -57,15 +57,117 @@ html { scroll-behavior: smooth; }
   border: 1px solid rgba(0, 161, 255, 0.08);
   animation: bubble-rise linear infinite;
 }
-.bubble-1 { width: 12px; height: 12px; left: 10%; bottom: -20px; animation-duration: 14s; animation-delay: 0s; }
-.bubble-2 { width: 8px;  height: 8px;  left: 30%; bottom: -20px; animation-duration: 18s; animation-delay: 3s; }
-.bubble-3 { width: 16px; height: 16px; left: 60%; bottom: -20px; animation-duration: 16s; animation-delay: 1s; }
-.bubble-4 { width: 6px;  height: 6px;  left: 80%; bottom: -20px; animation-duration: 20s; animation-delay: 5s; }
-.bubble-5 { width: 10px; height: 10px; left: 45%; bottom: -20px; animation-duration: 22s; animation-delay: 7s; }
+.bubble-1 { width: 12px; height: 12px; left: 10%; bottom: -20px; animation-duration: 14s; animation-delay: 0s;   }
+.bubble-2 { width: 8px;  height: 8px;  left: 30%; bottom: -20px; animation-duration: 18s; animation-delay: 3s;   }
+.bubble-3 { width: 16px; height: 16px; left: 60%; bottom: -20px; animation-duration: 16s; animation-delay: 1s;   }
+.bubble-4 { width: 6px;  height: 6px;  left: 80%; bottom: -20px; animation-duration: 20s; animation-delay: 5s;   }
+.bubble-5 { width: 10px; height: 10px; left: 45%; bottom: -20px; animation-duration: 22s; animation-delay: 7s;   }
+.bubble-6 { width: 9px;  height: 9px;  left: 20%; bottom: -20px; animation-duration: 15s; animation-delay: 9s;   }
+.bubble-7 { width: 14px; height: 14px; left: 70%; bottom: -20px; animation-duration: 19s; animation-delay: 2s;   }
+.bubble-8 { width: 7px;  height: 7px;  left: 55%; bottom: -20px; animation-duration: 17s; animation-delay: 11s;  }
 
 @keyframes bubble-rise {
   0%   { transform: translateY(0) translateX(0); opacity: 0; }
   10%  { opacity: 0.6; }
   90%  { opacity: 0.3; }
   100% { transform: translateY(-100vh) translateX(30px); opacity: 0; }
+}
+
+/* ── Deep-ocean scene animations ─────────────────────────────────────────── */
+
+/* Wave layers – seamless horizontal drift */
+.wave-layer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 200%;
+  animation: wave-drift linear infinite;
+}
+.wave-layer-1 { animation-duration: 20s;                    }
+.wave-layer-2 { animation-duration: 14s; animation-direction: reverse; }
+.wave-layer-3 { animation-duration: 9s;                     }
+
+@keyframes wave-drift {
+  from { transform: translateX(0);    }
+  to   { transform: translateX(-50%); }
+}
+
+/* Ocean creature traverse – right */
+@keyframes ocean-traverse-right {
+  from { transform: translateX(-22vw);  }
+  to   { transform: translateX(110vw);  }
+}
+
+/* Ocean creature traverse – left (element is flipped via scaleX(-1) in JS) */
+@keyframes ocean-traverse-left {
+  from { transform: translateX(110vw) scaleX(-1);  }
+  to   { transform: translateX(-22vw) scaleX(-1);  }
+}
+
+/* Submarine gentle vertical bob */
+@keyframes sub-bob {
+  0%, 100% { transform: translateY(0);    }
+  50%      { transform: translateY(-8px); }
+}
+
+/* Submarine propeller-trail bubbles */
+.sub-bubble {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(0, 161, 255, 0.18);
+  border: 1px solid rgba(0, 161, 255, 0.12);
+  animation: sub-bubble-drift linear infinite;
+}
+.sub-bubble-1 { width: 8px;  height: 8px;  left: -10px; top: 50px; animation-duration: 3s;  animation-delay: 0s;   }
+.sub-bubble-2 { width: 5px;  height: 5px;  left: -16px; top: 60px; animation-duration: 2.5s; animation-delay: 0.8s; }
+.sub-bubble-3 { width: 6px;  height: 6px;  left: -6px;  top: 40px; animation-duration: 3.5s; animation-delay: 1.6s; }
+
+@keyframes sub-bubble-drift {
+  0%   { transform: translate(0, 0);      opacity: 0.7; }
+  100% { transform: translate(-40px, -30px); opacity: 0; }
+}
+
+/* Jellyfish pulse-float */
+@keyframes jelly-drift {
+  0%, 100% { transform: translateY(0)    scale(1);    }
+  50%      { transform: translateY(-18px) scale(0.94); }
+}
+
+/* Sonar ping – expanding ring */
+.sonar-ping {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 161, 255, 0.55);
+  animation: sonar-ping-expand ease-out infinite;
+}
+
+@keyframes sonar-ping-expand {
+  0%   { transform: scale(1);   opacity: 0.7; }
+  100% { transform: scale(9);   opacity: 0;   }
+}
+
+/* Surface light-shaft shimmer */
+@keyframes light-shaft-pulse {
+  0%, 100% { opacity: 0.035; }
+  50%      { opacity: 0.09;  }
+}
+
+/* Reduce motion: freeze all decorative background animations */
+@media (prefers-reduced-motion: reduce) {
+  .wave-layer,
+  .bubble,
+  .sonar-ping,
+  .sub-bubble {
+    animation: none !important;
+  }
+  /* Also target inline-styled animated elements in OceanBackground */
+  [style*="ocean-traverse-right"],
+  [style*="ocean-traverse-left"],
+  [style*="sub-bob"],
+  [style*="jelly-drift"],
+  [style*="light-shaft-pulse"] {
+    animation: none !important;
+  }
 }
