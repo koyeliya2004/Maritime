@@ -128,10 +128,11 @@ export function ParticlesBackground() {
     init();
     animate();
 
-    window.addEventListener("resize", () => { resize(); init(); });
+    const handleResize = () => { resize(); init(); };
+    window.addEventListener("resize", handleResize);
     return () => {
       cancelAnimationFrame(animId);
-      window.removeEventListener("resize", resize);
+      window.removeEventListener("resize", handleResize);
     };
   }, []);
 
