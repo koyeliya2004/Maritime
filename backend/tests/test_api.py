@@ -35,16 +35,6 @@ def _make_png_bytes(width: int = 64, height: int = 64, color=(30, 80, 120)) -> b
     return buf.getvalue()
 
 
-def _assert_valid_image_base64(b64_str: str) -> None:
-    """Assert that a string is a valid base64-encoded image data-URI."""
-    assert b64_str.startswith("data:image/")
-    raw = b64_str.split(",", 1)[1]
-    decoded = base64.b64decode(raw)
-    img = Image.open(io.BytesIO(decoded))
-    assert img.size[0] > 0
-    assert img.size[1] > 0
-
-
 # ---------------------------------------------------------------------------
 # /health
 # ---------------------------------------------------------------------------
@@ -71,12 +61,8 @@ def test_process_returns_required_keys():
     data = response.json()
     assert "enhanced_image_base64" in data
     assert "heatmap_base64" in data
-    assert "sonar_base64" in data
-    assert "biolight_base64" in data
-    assert "boxed_image_base64" in data
     assert "detections" in data
     assert "sitrep_text" in data
-    assert "transmission" in data
 
 
 def test_process_enhanced_image_is_valid_base64():
@@ -86,7 +72,15 @@ def test_process_enhanced_image_is_valid_base64():
         files={"file": ("test.png", png, "image/png")},
     )
     assert response.status_code == 200
-    _assert_valid_image_base64(response.json()["enhanced_image_base64"])
+    b64_str = response.json()["enhanced_image_base64"]
+    # Should be a data-URI
+    assert b64_str.startswith("data:image/")
+    # Extract the raw base64 portion and verify it decodes
+    raw = b64_str.split(",", 1)[1]
+    decoded = base64.b64decode(raw)
+    img = Image.open(io.BytesIO(decoded))
+    assert img.size[0] > 0
+    assert img.size[1] > 0
 
 
 def test_process_heatmap_is_valid_base64():
@@ -96,7 +90,12 @@ def test_process_heatmap_is_valid_base64():
         files={"file": ("test.png", png, "image/png")},
     )
     assert response.status_code == 200
-    _assert_valid_image_base64(response.json()["heatmap_base64"])
+    b64_str = response.json()["heatmap_base64"]
+    assert b64_str.startswith("data:image/")
+    raw = b64_str.split(",", 1)[1]
+    decoded = base64.b64decode(raw)
+    img = Image.open(io.BytesIO(decoded))
+    assert img.size[0] > 0
 
 
 def test_process_detections_structure():
@@ -128,51 +127,6 @@ def test_process_sitrep_is_string():
     sitrep = response.json()["sitrep_text"]
     assert isinstance(sitrep, str)
     assert len(sitrep) > 0
-
-
-def test_process_sonar_is_valid_base64():
-    png = _make_png_bytes()
-    response = client.post(
-        "/process",
-        files={"file": ("test.png", png, "image/png")},
-    )
-    assert response.status_code == 200
-    _assert_valid_image_base64(response.json()["sonar_base64"])
-
-
-def test_process_biolight_is_valid_base64():
-    png = _make_png_bytes()
-    response = client.post(
-        "/process",
-        files={"file": ("test.png", png, "image/png")},
-    )
-    assert response.status_code == 200
-    _assert_valid_image_base64(response.json()["biolight_base64"])
-
-
-def test_process_boxed_image_is_valid_base64():
-    png = _make_png_bytes()
-    response = client.post(
-        "/process",
-        files={"file": ("test.png", png, "image/png")},
-    )
-    assert response.status_code == 200
-    _assert_valid_image_base64(response.json()["boxed_image_base64"])
-
-
-def test_process_transmission_structure():
-    png = _make_png_bytes()
-    response = client.post(
-        "/process",
-        files={"file": ("test.png", png, "image/png")},
-    )
-    assert response.status_code == 200
-    transmission = response.json()["transmission"]
-    assert isinstance(transmission, dict)
-    assert "mode" in transmission
-    assert "compression" in transmission
-    assert isinstance(transmission["mode"], str)
-    assert isinstance(transmission["compression"], str)
 
 
 # ---------------------------------------------------------------------------

@@ -1,19 +1,26 @@
+# processing.py
 """
-Image processing pipeline for SUB-SENTINEL.
+SUB-SENTINEL processing pipeline (Groq-first, Ultralytics fallback).
 
-Provides three functions:
-  enhance_image(raw_bytes)        → (base64_str, numpy_array)
-  run_detection(image_array)      → list[dict]
-  build_heatmap(image_array)      → base64_str
+Exports:
+  enhance_image(raw_bytes) -> (base64_str, np.ndarray)
+  run_detection(rgb, sonar_data=None, conf_thresh=0.40) -> list[dict]
+  build_heatmap(rgb) -> base64_str
+  fuse_sonar_overlay(rgb, sonar_data) -> base64_str
+  generate_vector_sketch(detections) -> str (base64 zlib JSON)
 
-All heavy-weight model paths gracefully fall back to CPU-friendly alternatives
-when model weights are absent.
+Environment:
+  DETECTION_BACKEND = "groq" | "ultralytics" | "auto"  (default "auto")
+  DETECTION_MODEL   = path to model / compiled groq artifact or ultralytics model id (default "yolov8m.pt")
+  GROQ_API_KEY      = optional API key for Groq LLM (if you want LLM postprocessing)
 """
-
-import base64
+import os
 import io
+import json
+import zlib
+import base64
 import logging
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 import cv2
 import numpy as np
@@ -21,11 +28,15 @@ from PIL import Image
 from skimage.metrics import structural_similarity as ssim
 
 logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
-# ---------------------------------------------------------------------------
-# Maritime label mapping for YOLOv8 COCO classes
-# ---------------------------------------------------------------------------
-_LABEL_MAP: dict[str, str] = {
+# Config
+DEFAULT_DETECTION_MODEL = os.getenv("DETECTION_MODEL", "yolov8m.pt")
+DETECTION_BACKEND = os.getenv("DETECTION_BACKEND", "auto").lower()  # "groq", "ultralytics", "auto"
+GROQ_API_KEY = os.getenv("GROQ_API_KEY") or os.getenv("groq")  # read common variants
+
+# Maritime label mapping (COCO -> maritime)
+_LABEL_MAP: Dict[str, str] = {
     "person": "Diver/Swimmer",
     "boat": "Surface/Sub Threat",
     "ship": "Surface/Sub Threat",
@@ -34,19 +45,18 @@ _LABEL_MAP: dict[str, str] = {
     # extend as needed
 }
 
-
-def _array_to_base64(img_array: np.ndarray, fmt: str = "JPEG") -> str:
-    """Convert a uint8 numpy array (H×W×C, RGB) to a base-64 data-URI string."""
+# --------------------------- utilities -------------------------------------
+def _array_to_base64(img_array: np.ndarray, fmt: str = "PNG") -> str:
     pil_img = Image.fromarray(img_array.astype(np.uint8))
     buf = io.BytesIO()
-    pil_img.save(buf, format=fmt, quality=90)
+    fmt_upper = fmt.upper()
+    pil_img.save(buf, format=fmt_upper, quality=90)
     encoded = base64.b64encode(buf.getvalue()).decode("utf-8")
-    mime = "image/jpeg" if fmt == "JPEG" else "image/png"
+    mime = "image/png" if fmt_upper == "PNG" else "image/jpeg"
     return f"data:{mime};base64,{encoded}"
 
 
 def _bytes_to_array(raw_bytes: bytes) -> np.ndarray:
-    """Decode raw image bytes to a uint8 RGB numpy array."""
     nparr = np.frombuffer(raw_bytes, np.uint8)
     bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if bgr is None:
@@ -54,218 +64,391 @@ def _bytes_to_array(raw_bytes: bytes) -> np.ndarray:
     return cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
 
 
-# ---------------------------------------------------------------------------
-# 1. Underwater image enhancement
-# ---------------------------------------------------------------------------
+def _ensure_int_box(box: List[float]) -> List[int]:
+    return [int(round(v)) for v in box]
 
 
+# ------------------------ enhancement engines -------------------------------
 def _clahe_enhance(rgb: np.ndarray) -> np.ndarray:
-    """
-    CPU-friendly underwater enhancement using CLAHE on LAB colour space.
-    Used when FUnIE-GAN weights are unavailable.
-    """
     lab = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB)
-    l_channel, a_channel, b_channel = cv2.split(lab)
+    l, a, b = cv2.split(lab)
     clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
-    l_channel = clahe.apply(l_channel)
-    # Slight blue-green colour correction typical for underwater footage
-    a_channel = np.clip(a_channel.astype(np.int16) - 5, 0, 255).astype(np.uint8)
-    b_channel = np.clip(b_channel.astype(np.int16) + 10, 0, 255).astype(np.uint8)
-    enhanced_lab = cv2.merge([l_channel, a_channel, b_channel])
-    return cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2RGB)
+    l = clahe.apply(l)
+    a = np.clip(a.astype(np.int16) - 5, 0, 255).astype(np.uint8)
+    b = np.clip(b.astype(np.int16) + 10, 0, 255).astype(np.uint8)
+    merged = cv2.merge([l, a, b])
+    return cv2.cvtColor(merged, cv2.COLOR_LAB2RGB)
 
 
 def _funiegan_enhance(rgb: np.ndarray) -> Optional[np.ndarray]:
-    """
-    Attempt FUnIE-GAN inference via a local ONNX weight file.
-    Returns None if weights are missing so the caller can fall back.
-    """
     weights_path = "weights/funiegan.onnx"
+    if not os.path.exists(weights_path):
+        return None
     try:
-        import os
-        if not os.path.exists(weights_path):
-            return None
         net = cv2.dnn.readNetFromONNX(weights_path)
         h, w = rgb.shape[:2]
-        target_h, target_w = 256, 256
-        resized = cv2.resize(rgb, (target_w, target_h)).astype(np.float32) / 127.5 - 1.0
+        resized = cv2.resize(rgb, (256, 256)).astype(np.float32) / 127.5 - 1.0
         blob = cv2.dnn.blobFromImage(resized)
         net.setInput(blob)
         out = net.forward()
         out_img = ((out[0].transpose(1, 2, 0) + 1.0) * 127.5).clip(0, 255).astype(np.uint8)
         return cv2.resize(out_img, (w, h))
     except Exception as exc:
-        logger.warning("FUnIE-GAN inference failed (%s); using CLAHE fallback.", exc)
+        logger.warning("FUnIE-GAN inference failed (%s); falling back.", exc)
         return None
 
 
-def enhance_image(raw_bytes: bytes) -> tuple[str, np.ndarray]:
-    """
-    Enhance an underwater image.
-
-    Returns:
-        (base64_enhanced, original_rgb_array)
-    The original array is returned unchanged for use in downstream steps.
-    """
+def enhance_image(raw_bytes: bytes, prefer_funiegan: bool = True) -> tuple[str, np.ndarray]:
     rgb = _bytes_to_array(raw_bytes)
-    enhanced = _funiegan_enhance(rgb)
+    enhanced = None
+    if prefer_funiegan:
+        enhanced = _funiegan_enhance(rgb)
     if enhanced is None:
         enhanced = _clahe_enhance(rgb)
-    return _array_to_base64(enhanced), rgb
+    return _array_to_base64(enhanced, fmt="JPEG"), rgb
 
 
-# ---------------------------------------------------------------------------
-# 2. Object detection (YOLOv8n)
-# ---------------------------------------------------------------------------
-
-
-def run_detection(rgb: np.ndarray) -> list[dict]:
-    """
-    Run YOLOv8n COCO detection and map labels to maritime terminology.
-
-    Returns a list of detection dicts:
-      {class, mapped_label, confidence, bbox: [x1, y1, x2, y2]}
-    """
-    try:
-        from ultralytics import YOLO  # lazy import – large package
-        model = YOLO("yolov8n.pt")    # downloads automatically on first run
-        results = model(rgb, verbose=False)
-    except Exception as exc:
-        logger.warning("YOLOv8n detection failed (%s); returning empty detections.", exc)
-        return []
-
-    detections = []
-    for result in results:
-        if result.boxes is None:
-            continue
-        for box in result.boxes:
-            cls_id = int(box.cls[0])
-            cls_name = model.names.get(cls_id, str(cls_id))
-            conf = float(box.conf[0])
-            x1, y1, x2, y2 = (float(v) for v in box.xyxy[0])
-            detections.append(
-                {
-                    "class": cls_name,
-                    "mapped_label": _LABEL_MAP.get(cls_name, cls_name),
-                    "confidence": round(conf, 4),
-                    "bbox": [round(x1), round(y1), round(x2), round(y2)],
-                }
-            )
-    return detections
-
-
-# ---------------------------------------------------------------------------
-# 3. SSIM-based forensic heatmap
-# ---------------------------------------------------------------------------
-
-
+# ------------------------- forensic heatmap --------------------------------
 def build_heatmap(rgb: np.ndarray) -> str:
-    """
-    Generate a forensic heatmap by comparing the original image against a
-    Gaussian-blurred reference.  High SSIM → green; low SSIM → red.
-
-    Returns a base64-encoded PNG heatmap.
-    """
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-    # Reference: gently blurred version of the same frame
     blurred = cv2.GaussianBlur(gray, (15, 15), 0)
-
-    # Compute SSIM score map (window-level scores)
-    _, ssim_map = ssim(gray, blurred, full=True, data_range=255)
-
-    # Normalise to [0, 255]
-    ssim_norm = ((ssim_map + 1.0) / 2.0 * 255).clip(0, 255).astype(np.uint8)
-
-    # Map to BGR: low similarity → red (forensic interest), high → green
+    try:
+        _, ssim_map = ssim(gray, blurred, full=True, data_range=255)
+    except Exception:
+        diff = cv2.absdiff(gray, blurred).astype(np.float32) / 255.0
+        ssim_map = 1.0 - diff
+    ssim_norm = ((ssim_map + 1.0) / 2.0 * 255.0).clip(0, 255).astype(np.uint8)
     colormap = cv2.COLORMAP_RdYlGn if hasattr(cv2, "COLORMAP_RdYlGn") else cv2.COLORMAP_JET
     heatmap_bgr = cv2.applyColorMap(ssim_norm, colormap)
-
-    # Blend with original for context
     rgb_bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
     overlay = cv2.addWeighted(rgb_bgr, 0.55, heatmap_bgr, 0.45, 0)
     overlay_rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
-
     return _array_to_base64(overlay_rgb, fmt="PNG")
 
 
-# ---------------------------------------------------------------------------
-# 4. Sonar-style visualisation
-# ---------------------------------------------------------------------------
+# ------------------------- detection helpers --------------------------------
+def _local_texture_authenticity(patch: np.ndarray) -> float:
+    if patch is None or patch.size == 0:
+        return 0.0
+    gray = cv2.cvtColor(patch, cv2.COLOR_RGB2GRAY) if patch.ndim == 3 else patch
+    var = cv2.Laplacian(gray, cv2.CV_64F).var()
+    norm = (var - 10.0) / (200.0 - 10.0)
+    return float(np.clip(norm, 0.0, 1.0))
 
 
-def build_sonar(rgb: np.ndarray) -> str:
+# ---------------------- Groq runtime backend (placeholder) ------------------
+def _run_detection_groq(rgb: np.ndarray, compiled_model_path: str, conf_thresh: float) -> List[Dict[str, Any]]:
     """
-    Generate a sonar-style green monochrome radar visualisation.
+    Placeholder Groq runner. Replace with your project's Groq runtime/SDK calls.
 
-    Returns a base64-encoded PNG image.
+    Recommended flow:
+      - import the Groq runtime installed in your environment (API differs by Groq release)
+      - load compiled artifact or use a long-lived runner
+      - prepare input (resize / normalize) exactly as the compiled model expects
+      - run inference and parse outputs into COCO-like detections:
+            [ {"class": "person", "conf": 0.82, "bbox":[x1,y1,x2,y2]}, ... ]
+    If Groq runtime isn't installed, this function raises and the pipeline will fallback.
     """
-    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-    # Apply edge detection for a "ping" look
-    edges = cv2.Canny(gray, 40, 120)
-    # Create green-channel sonar image
-    sonar = np.zeros((*gray.shape, 3), dtype=np.uint8)
-    sonar[:, :, 1] = cv2.addWeighted(gray, 0.5, edges, 0.5, 0)  # green channel
-    sonar[:, :, 0] = (gray * 0.1).astype(np.uint8)  # faint blue tint
-    # Add scan-line effect
-    for y in range(0, gray.shape[0], 3):
-        sonar[y, :, :] = (sonar[y, :, :].astype(np.float32) * 0.6).astype(np.uint8)
-    return _array_to_base64(sonar, fmt="PNG")
+    # Try to import a Groq runtime package (NAME VARIES). This is intentionally guarded.
+    try:
+        # Example placeholder import; replace with your runtime import
+        import groq_runtime  # <<-- REPLACE with actual Groq runtime package for your compiled model
+    except Exception as exc:
+        raise RuntimeError("Groq runtime not installed") from exc
+
+    # PSEUDOCODE (replace with your actual runtime usage):
+    try:
+        # runner = groq_runtime.Runner(compiled_model_path)
+        # model_input = cv2.resize(rgb, (MODEL_W, MODEL_H)).astype(np.float32) / 255.0
+        # batch = np.expand_dims(model_input, axis=0)
+        # outputs = runner.run(batch)
+        # parse outputs -> parsed_detections
+        parsed_detections: List[Dict[str, Any]] = []
+        # -----> Replace the pseudocode above with real runtime calls and parsing
+        return parsed_detections
+    except Exception as exc:
+        raise RuntimeError("Groq model execution failed") from exc
 
 
-# ---------------------------------------------------------------------------
-# 5. Bio-luminescence visualisation
-# ---------------------------------------------------------------------------
-
-
-def build_biolight(rgb: np.ndarray) -> str:
+# -------------------- Groq LLM refinement (optional) ------------------------
+def refine_with_groq_llm(detections: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Generate a bio-luminescence style visualisation with deep-ocean
-    blue-teal glow effect.
+    (Optional) Use a Groq LLM to refine/correct YOLO outputs (label mapping, merge boxes, etc.)
+    This function is intentionally conservative: if no GROQ_API_KEY or client, it returns original detections.
 
-    Returns a base64-encoded PNG image.
+    To enable: install the Groq client/SDK for LLM usage and replace the body below
+    with a real call. Keep the function robust: always return a list of detections.
     """
-    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-    # Invert for glow-on-dark effect
-    inv = cv2.bitwise_not(gray)
-    blurred = cv2.GaussianBlur(inv, (21, 21), 0)
-    # Build deep ocean colour: blue-teal palette
-    bio = np.zeros((*gray.shape, 3), dtype=np.uint8)
-    bio[:, :, 0] = (blurred * 0.3).astype(np.uint8)   # red (minimal)
-    bio[:, :, 1] = (blurred * 0.7).astype(np.uint8)   # green (teal)
-    bio[:, :, 2] = blurred                              # blue (dominant)
-    # Blend with dimmed original for context
-    dimmed = (rgb * 0.2).astype(np.uint8)
-    result = cv2.addWeighted(dimmed, 0.4, bio, 0.6, 0)
-    return _array_to_base64(result, fmt="PNG")
+    if not GROQ_API_KEY or not detections:
+        return detections
+
+    # >>> EXAMPLE (COMMENTED) - Replace with your Groq LLM client usage <<<
+    # try:
+    #     import groq
+    #     client = groq.Client(api_key=GROQ_API_KEY)
+    #     prompt = "You are a maritime analyst. Given these detections (JSON), correct labels and return JSON list."
+    #     response = client.chat.completions.create(
+    #         model="llama-3-small", messages=[{"role":"user","content":prompt + json.dumps(detections)}], temperature=0.2
+    #     )
+    #     refined = json.loads(response.choices[0].message.content)
+    #     return refined
+    # except Exception as e:
+    #     logger.warning("Groq LLM refine failed: %s", e)
+    #     return detections
+
+    # By default, return unchanged (safe!)
+    return detections
 
 
-# ---------------------------------------------------------------------------
-# 6. Boxed image (detection bounding boxes drawn on image)
-# ---------------------------------------------------------------------------
-
-
-def build_boxed_image(rgb: np.ndarray, detections: list[dict]) -> str:
+# ------------------------- unified detection (Groq -> Ultralytics) ----------
+def run_detection(rgb: np.ndarray,
+                  sonar_data: Optional[Dict[str, Any]] = None,
+                  conf_thresh: float = 0.40,
+                  allowed_only: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """
-    Draw detection bounding boxes on the image.
+    Try configured backend(s) and return enriched detection dicts:
+      {
+        "class": str,
+        "mapped_label": str,
+        "confidence": float,
+        "forensic_confidence": "HIGH|MEDIUM|LOW",
+        "bbox": [x1,y1,x2,y2],
+        "hallucinated": bool
+      }
+    """
+    allowed = set(allowed_only) if allowed_only else set(_LABEL_MAP.keys())
+    backend_choice = DETECTION_BACKEND
+    model_path = os.getenv("DETECTION_MODEL", DEFAULT_DETECTION_MODEL)
 
-    Returns a base64-encoded PNG image.
+    # 1) Try Groq compiled runtime if requested or auto
+    if backend_choice in ("groq", "auto"):
+        try:
+            groq_dets = _run_detection_groq(rgb, model_path, conf_thresh)
+            if groq_dets:
+                enriched: List[Dict[str, Any]] = []
+                h, w = rgb.shape[:2]
+                for d in groq_dets:
+                    cls_name = d.get("class", "unknown")
+                    conf = float(d.get("conf", 0.0))
+                    if conf < conf_thresh or cls_name not in allowed:
+                        continue
+                    x1, y1, x2, y2 = _ensure_int_box(d.get("bbox", [0, 0, 0, 0]))
+                    patch = rgb[y1:y2, x1:x2] if y2 > y1 and x2 > x1 else None
+                    texture = _local_texture_authenticity(patch)
+                    combined = 0.6 * conf + 0.4 * texture
+                    forensic = "HIGH" if combined > 0.75 else "MEDIUM" if combined > 0.55 else "LOW"
+                    hallucinated = (conf > 0.6 and texture < 0.25)
+                    enriched.append({
+                        "class": cls_name,
+                        "mapped_label": _LABEL_MAP.get(cls_name, cls_name),
+                        "confidence": round(conf, 4),
+                        "forensic_confidence": forensic,
+                        "bbox": [x1, y1, x2, y2],
+                        "hallucinated": hallucinated,
+                    })
+                if enriched:
+                    # Optional LLM refine step (won't run unless GROQ_API_KEY & client wired)
+                    return refine_with_groq_llm(enriched)
+        except Exception as exc:
+            logger.info("Groq backend not used: %s", exc)
+
+    # 2) Fallback to Ultralytics (YOLO)
+    try:
+        from ultralytics import YOLO  # type: ignore
+    except Exception as exc:
+        logger.warning("ultralytics not available (%s); detection disabled.", exc)
+        return []
+
+    try:
+        model = YOLO(model_path)
+        results = model(rgb, verbose=False)
+    except Exception as exc:
+        logger.warning("Ultralytics model load/inference failed (%s).", exc)
+        return []
+
+    detections: List[Dict[str, Any]] = []
+    h, w = rgb.shape[:2]
+    for result in results:
+        boxes = getattr(result, "boxes", None)
+        if boxes is None:
+            continue
+        for box in boxes:
+            try:
+                conf = float(box.conf[0]) if hasattr(box.conf, "__len__") else float(box.conf)
+                if conf < conf_thresh:
+                    continue
+                cls_id = int(box.cls[0]) if hasattr(box.cls, "__len__") else int(box.cls)
+                cls_name = model.names.get(cls_id, str(cls_id)) if hasattr(model, "names") else str(cls_id)
+                xyxy = box.xyxy[0] if hasattr(box.xyxy, "__len__") and len(box.xyxy) > 0 else None
+                if xyxy is None:
+                    continue
+                x1, y1, x2, y2 = (int(round(float(v))) for v in xyxy)
+                if cls_name not in allowed:
+                    continue
+                patch = rgb[y1:y2, x1:x2] if y2 > y1 and x2 > x1 else None
+                texture_score = _local_texture_authenticity(patch)
+                combined = 0.6 * conf + 0.4 * texture_score
+                forensic = "HIGH" if combined > 0.75 else "MEDIUM" if combined > 0.55 else "LOW"
+                hallucinated = (conf > 0.6 and texture_score < 0.25)
+                detections.append({
+                    "class": cls_name,
+                    "mapped_label": _LABEL_MAP.get(cls_name, cls_name),
+                    "confidence": round(conf, 4),
+                    "forensic_confidence": forensic,
+                    "bbox": [x1, y1, x2, y2],
+                    "hallucinated": hallucinated,
+                })
+            except Exception as exc:
+                logger.debug("Skipping a box due to error: %s", exc)
+                continue
+
+    # Optional LLM refinement (no-op unless you wire in GROQ LLM client)
+    detections = refine_with_groq_llm(detections)
+
+    # Sonar-guided hallucination placeholders when no vision detections
+    if sonar_data and not detections:
+        contours = sonar_data.get("contours", [])
+        for c in contours:
+            pts = []
+            for nx, ny in c:
+                px = int(np.clip(nx, 0.0, 1.0) * w)
+                py = int(np.clip(ny, 0.0, 1.0) * h)
+                pts.append([px, py])
+            if len(pts) < 3:
+                continue
+            pts_np = np.array(pts, dtype=np.int32)
+            x, y, ww, hh = cv2.boundingRect(pts_np)
+            detections.append({
+                "class": "sonar_contact",
+                "mapped_label": "Sonar Contact (hallucinated)",
+                "confidence": 0.0,
+                "forensic_confidence": "LOW",
+                "bbox": [int(x), int(y), int(x + ww), int(y + hh)],
+                "hallucinated": True,
+                "sonar_polygon": pts,
+            })
+
+    return detections
+
+
+# -------------------- whisper-link / vector sketch --------------------------
+def generate_vector_sketch(detections: List[Dict[str, Any]], max_bytes: int = 1024) -> str:
+    sketch = {"detections": []}
+    for d in detections:
+        x1, y1, x2, y2 = d.get("bbox", [0, 0, 0, 0])
+        w = max(1, x2 - x1)
+        h = max(1, y2 - y1)
+        cx = x1 + w / 2.0
+        cy = y1 + h / 2.0
+        sketch["detections"].append({
+            "label": d.get("mapped_label", d.get("class")),
+            "conf": float(d.get("confidence", 0.0)),
+            "center": [float(cx), float(cy)],
+            "size": [float(w), float(h)],
+            "hallucinated": bool(d.get("hallucinated", False)),
+        })
+    raw = json.dumps(sketch, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    compressed = zlib.compress(raw, level=9)
+    if len(compressed) > max_bytes:
+        summary = {"summary": [{"label": x["label"], "conf": x["conf"]} for x in sketch["detections"]]}
+        compressed = zlib.compress(json.dumps(summary, separators=(",", ":")).encode("utf-8"), level=9)
+    return base64.b64encode(compressed).decode("utf-8")
+
+
+# --------------------- sonar overlay / wireframe ---------------------------
+def fuse_sonar_overlay(rgb: np.ndarray, sonar_data: Dict[str, Any]) -> str:
+    h, w = rgb.shape[:2]
+    canvas = rgb.copy()
+
+    center = (w // 2, h // 2)
+
+    # Radar circles
+    for r in range(50, min(center), 60):
+        cv2.circle(canvas, center, r, (0, 255, 0), 1)
+
+    # Sweep line
+    cv2.line(canvas, center, (w, h//2), (0, 255, 0), 2)
+
+    # Keep original contour logic also
+    if sonar_data:
+        contours = sonar_data.get("contours", [])
+        for c in contours:
+            pts = []
+            for nx, ny in c:
+                px = int(np.clip(nx, 0.0, 1.0) * (w - 1))
+                py = int(np.clip(ny, 0.0, 1.0) * (h - 1))
+                pts.append([px, py])
+
+            if len(pts) >= 2:
+                pts_np = np.array(pts, dtype=np.int32)
+                cv2.polylines(canvas, [pts_np], True, (0, 255, 255), 2)
+
+    return _array_to_base64(canvas, fmt="PNG")
+
+# --------------------------- SITREP helper ---------------------------------
+# ===================== 🔥 NEW VISUAL FEATURES ==============================
+
+def draw_detection_boxes(rgb: np.ndarray, detections: List[Dict[str, Any]]) -> str:
+    """
+    Draw bounding boxes on image (for frontend display)
     """
     img = rgb.copy()
+
     for det in detections:
         x1, y1, x2, y2 = det["bbox"]
-        conf = det["confidence"]
-        label = det["mapped_label"]
-        # Color based on confidence
-        if conf >= 0.75:
-            color = (239, 68, 68)    # red – high threat
-        elif conf >= 0.5:
-            color = (245, 158, 11)   # amber – medium
-        else:
-            color = (34, 197, 94)    # green – low
-        cv2.rectangle(img, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
-        text = f"{label} {conf:.0%}"
-        (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-        cv2.rectangle(img, (int(x1), int(y1) - th - 8), (int(x1) + tw + 4, int(y1)), color, -1)
-        cv2.putText(img, text, (int(x1) + 2, int(y1) - 4),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
-    return _array_to_base64(img, fmt="PNG")
+        label = f"{det['mapped_label']} {int(det['confidence']*100)}%"
+
+        # Box
+        cv2.rectangle(img, (x1, y1), (x2, y2), (255, 50, 50), 2)
+
+        # Text
+        cv2.putText(
+            img,
+            label,
+            (x1, y1 - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (255, 50, 50),
+            2
+        )
+
+    return _array_to_base64(img, fmt="JPEG")
+
+
+def generate_bioluminescence(rgb: np.ndarray) -> str:
+    """
+    Underwater glowing effect
+    """
+    glow = cv2.GaussianBlur(rgb, (0, 0), 20)
+
+    tint = np.zeros_like(rgb)
+    tint[:, :, 1] = 80   # green
+    tint[:, :, 2] = 120  # blue
+
+    combined = cv2.addWeighted(rgb, 0.6, glow, 0.7, 0)
+    final = cv2.addWeighted(combined, 0.8, tint, 0.2, 0)
+
+    return _array_to_base64(final, fmt="JPEG")
+    
+def detections_to_sitrep_txt(detections: List[Dict[str, Any]]) -> str:
+    if not detections:
+        return ("SITUATION: Sensor sweep complete – no contacts.\n"
+                "ASSESSMENT: Area clear.\n"
+                "RECOMMENDATION: Continue routine patrol.")
+    labels = ", ".join({d["mapped_label"] for d in detections})
+    count = len(detections)
+    return (f"SITUATION: {count} contact(s) detected – {labels}.\n"
+            "ASSESSMENT: Requires manual review (forensic confidence noted).\n"
+            "RECOMMENDATION: Dispatch response team and maintain sensor lock.")
+
+
+__all__ = [
+    "enhance_image",
+    "run_detection",
+    "build_heatmap",
+    "fuse_sonar_overlay",
+    "generate_vector_sketch",
+    "detections_to_sitrep_txt",
+    "draw_detection_boxes",
+    "generate_bioluminescence",
+]
