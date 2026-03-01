@@ -40,3 +40,6 @@ Thumbs.db
 *.pth
 *.weights
 *.onnx
+
+# Forensic evidence output (generated at runtime)
+evidence/

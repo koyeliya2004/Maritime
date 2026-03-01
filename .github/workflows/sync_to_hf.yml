@@ -3,6 +3,9 @@ name: Sync HuggingFace Backend
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -10,6 +13,8 @@ jobs:
     steps:
       - name: Checkout GitHub Repo
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Clone Hugging Face Space
         run: git clone https://huggingface.co/spaces/Arko007/maritime hf-backend
