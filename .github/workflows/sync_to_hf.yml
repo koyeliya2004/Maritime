@@ -2,8 +2,6 @@ name: Sync HuggingFace Backend
 
 on:
 workflow_dispatch:
-schedule:
-- cron: "0 0 * * *"
 
 jobs:
 sync:
@@ -20,10 +18,11 @@ steps:
 
   - name: Replace backend folder
     run: |
-      rm -rf backend/*
+      rm -rf backend
+      mkdir backend
       cp -r hf-backend/* backend/
 
-  - name: Clean .git
+  - name: Remove git files
     run: |
       rm -rf backend/.git
 
@@ -31,7 +30,7 @@ steps:
     run: |
       git config --global user.name "github-actions"
       git config --global user.email "actions@github.com"
-      git add backend
+      git add .
       git commit -m "Auto sync backend from HF" || echo "No changes"
       git push
 ```
