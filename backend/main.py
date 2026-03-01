@@ -1,6 +1,5 @@
 """
 SUB-SENTINEL backend – FastAPI application.
-
 Enhanced Features Added:
 ✔ Sonar Mode
 ✔ Bioluminescence Mode
@@ -9,16 +8,22 @@ Enhanced Features Added:
 ✔ System Status Panel
 """
 
-import cv2
-import numpy as np
-import base64
 import os
 import logging
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from processing import enhance_image, run_detection, build_heatmap
+# Import ALL needed functions from processing.py (use the fixed versions!)
+from processing import (
+    enhance_image,
+    run_detection,
+    build_heatmap,
+    fuse_sonar_overlay,
+    generate_bioluminescence,
+    draw_detection_boxes,
+    generate_vector_sketch,
+)
 from sitrep import generate_sitrep
 
 logging.basicConfig(level=logging.INFO)
@@ -54,59 +59,11 @@ app.add_middleware(
 )
 
 # ---------------------------------------------------------------------------
-# 🔧 HELPER FUNCTIONS (NEW FEATURES)
+# 🔧 HELPER FUNCTIONS
 # ---------------------------------------------------------------------------
 
-def generate_sonar(image_array):
-    h, w, _ = image_array.shape
-    sonar = np.zeros((h, w, 3), dtype=np.uint8)
-
-    center = (w // 2, h // 2)
-
-    # circular waves
-    for r in range(50, min(center), 40):
-        cv2.circle(sonar, center, r, (0, 255, 0), 1)
-
-    # scanning line
-    cv2.line(sonar, center, (w, h//2), (0, 255, 0), 2)
-
-    blended = cv2.addWeighted(image_array, 0.3, sonar, 0.7, 0)
-
-    _, buffer = cv2.imencode('.jpg', blended)
-    return base64.b64encode(buffer).decode('utf-8')
-
-
-def apply_bioluminescence(image_array):
-    hsv = cv2.cvtColor(image_array, cv2.COLOR_BGR2HSV)
-    hsv[:, :, 2] = cv2.add(hsv[:, :, 2], 50)
-
-    glow = cv2.GaussianBlur(image_array, (0, 0), 15)
-    result = cv2.addWeighted(image_array, 0.6, glow, 0.8, 0)
-
-    _, buffer = cv2.imencode('.jpg', result)
-    return base64.b64encode(buffer).decode('utf-8')
-
-
-def draw_detections(image, detections):
-    for det in detections:
-        x1, y1, x2, y2 = map(int, det["bbox"])
-        label = f"{det['mapped_label']} {int(det['confidence']*100)}%"
-
-        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), 2)
-        cv2.putText(
-            image,
-            label,
-            (x1, y1 - 10),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
-            (0, 0, 255),
-            2
-        )
-
-    return image
-
-
 def transmission_status():
+    """System transmission metadata"""
     return {
         "mode": "ACTIVE",
         "type": "LOW BANDWIDTH",
@@ -144,19 +101,20 @@ async def process_image(file: UploadFile = File(...)) -> dict:
 
     try:
         # 🔹 Core pipeline
-        enhanced_b64, original_array = enhance_image(raw_bytes)
-        detections = run_detection(original_array)
-        heatmap_b64 = build_heatmap(original_array)
+        enhanced_b64, rgb_array = enhance_image(raw_bytes)
+        detections = run_detection(rgb_array)
+        heatmap_b64 = build_heatmap(rgb_array)
         sitrep = generate_sitrep(detections)
 
-        # 🔹 NEW FEATURES
-        sonar_b64 = generate_sonar(original_array)
-        biolight_b64 = apply_bioluminescence(original_array)
+        # 🔹 ADVANCED VISUALIZATION MODES (using fixed processing.py functions)
+        sonar_b64 = fuse_sonar_overlay(rgb_array, sonar_data={"angle": 0, "sweep": 30})
+        biolight_b64 = generate_bioluminescence(rgb_array)
+        boxed_b64 = draw_detection_boxes(rgb_array, detections)
 
-        boxed = draw_detections(original_array.copy(), detections)
-        _, buffer = cv2.imencode('.jpg', boxed)
-        boxed_b64 = base64.b64encode(buffer).decode('utf-8')
+        # 🔹 Low-bandwidth vector sketch
+        vector_sketch = generate_vector_sketch(detections, max_bytes=1024)
 
+        # 🔹 Transmission status
         tx_status = transmission_status()
 
     except Exception as exc:
@@ -170,6 +128,7 @@ async def process_image(file: UploadFile = File(...)) -> dict:
         "sonar_base64": sonar_b64,
         "biolight_base64": biolight_b64,
         "boxed_image_base64": boxed_b64,
+        "vector_sketch": vector_sketch,
         "detections": detections,
         "sitrep_text": sitrep,
         "transmission": tx_status,

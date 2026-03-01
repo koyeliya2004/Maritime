@@ -356,34 +356,72 @@ def generate_vector_sketch(detections: List[Dict[str, Any]], max_bytes: int = 10
 
 
 # --------------------- sonar overlay / wireframe ---------------------------
-def fuse_sonar_overlay(rgb: np.ndarray, sonar_data: Dict[str, Any]) -> str:
-    h, w = rgb.shape[:2]
-    canvas = rgb.copy()
+def fuse_sonar_overlay(rgb: np.ndarray, sonar_data: Optional[Dict[str, Any]] = None) -> str:
+    """
+    Draw sonar overlay with radar rings and sweep wedge.
+    sonar_data can contain:
+      - angle: center angle in degrees (0 = right, 90 = up)
+      - sweep: sweep half-width in degrees
+      - max_range: radius for wedge (in px)
+      - contours: list of normalized contour polygons
+    """
+    if rgb is None:
+        raise ValueError("rgb image is required")
 
+    # OpenCV drawing expects BGR. Convert, draw, then convert back.
+    bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+    h, w = bgr.shape[:2]
     center = (w // 2, h // 2)
+    radius_limit = min(center)
 
-    # Radar circles
-    for r in range(50, min(center), 60):
-        cv2.circle(canvas, center, r, (0, 255, 0), 1)
+    # draw concentric rings
+    for r in range(50, max(60, radius_limit), 60):
+        if r >= radius_limit:
+            break
+        cv2.circle(bgr, center, r, (0, 255, 0), 1)
 
-    # Sweep line
-    cv2.line(canvas, center, (w, h//2), (0, 255, 0), 2)
+    # parameters from sonar_data or defaults
+    angle = float(sonar_data.get("angle", 0)) if sonar_data else 0.0
+    sweep = float(sonar_data.get("sweep", 20)) if sonar_data else 20.0
+    max_r = int(sonar_data.get("max_range", radius_limit * 0.9)) if sonar_data else int(radius_limit * 0.9)
+
+    # make a translucent wedge for the sweep
+    overlay = bgr.copy()
+    start_angle = angle - sweep / 2.0
+    end_angle = angle + sweep / 2.0
+
+    # build polygon points (center + arc)
+    points = [center]
+    for ang in np.linspace(start_angle, end_angle, num=40):
+        rad = np.deg2rad(ang)
+        x = int(center[0] + max_r * np.cos(rad))
+        y = int(center[1] - max_r * np.sin(rad))  # coordinate system: y down => subtract
+        points.append((x, y))
+
+    pts = np.array(points, dtype=np.int32)
+    cv2.fillPoly(overlay, [pts], (0, 255, 0))
+    fused = cv2.addWeighted(bgr, 1.0, overlay, 0.20, 0)
+
+    # optional: draw a sweep outline
+    cv2.polylines(fused, [pts], isClosed=False, color=(0, 255, 0), thickness=1)
 
     # Keep original contour logic also
     if sonar_data:
         contours = sonar_data.get("contours", [])
         for c in contours:
-            pts = []
+            pts_contour = []
             for nx, ny in c:
                 px = int(np.clip(nx, 0.0, 1.0) * (w - 1))
                 py = int(np.clip(ny, 0.0, 1.0) * (h - 1))
-                pts.append([px, py])
+                pts_contour.append([px, py])
 
-            if len(pts) >= 2:
-                pts_np = np.array(pts, dtype=np.int32)
-                cv2.polylines(canvas, [pts_np], True, (0, 255, 255), 2)
+            if len(pts_contour) >= 2:
+                pts_np = np.array(pts_contour, dtype=np.int32)
+                cv2.polylines(fused, [pts_np], True, (0, 255, 255), 2)
 
-    return _array_to_base64(canvas, fmt="PNG")
+    final_rgb = cv2.cvtColor(fused, cv2.COLOR_BGR2RGB)
+    return _array_to_base64(final_rgb, fmt="PNG")
+
 
 # --------------------------- SITREP helper ---------------------------------
 # ===================== 🔥 NEW VISUAL FEATURES ==============================
@@ -417,18 +455,36 @@ def draw_detection_boxes(rgb: np.ndarray, detections: List[Dict[str, Any]]) -> s
 
 def generate_bioluminescence(rgb: np.ndarray) -> str:
     """
-    Underwater glowing effect
+    Create a bioluminescence effect:
+      - stronger blurred glow (Gaussian)
+      - cyan/teal tint blended on top
     """
-    glow = cv2.GaussianBlur(rgb, (0, 0), 20)
+    if rgb is None:
+        raise ValueError("rgb image is required")
 
-    tint = np.zeros_like(rgb)
-    tint[:, :, 1] = 80   # green
-    tint[:, :, 2] = 120  # blue
+    # use an explicit odd kernel for blur (clear and reliable)
+    glow = cv2.GaussianBlur(rgb, (21, 21), 0)
 
-    combined = cv2.addWeighted(rgb, 0.6, glow, 0.7, 0)
-    final = cv2.addWeighted(combined, 0.8, tint, 0.2, 0)
+    # build a cyan/teal tint - in RGB format (not BGR)
+    tint = np.zeros_like(rgb, dtype=np.uint8)
+    tint[:, :, 0] = 100  # Blue channel (in RGB)
+    tint[:, :, 1] = 160  # Green channel (in RGB)
+    tint[:, :, 2] = 40   # Red channel (keep low for cyan/teal)
 
+    # operate in float to avoid early clipping, then clip at the end
+    base_f = rgb.astype(np.float32)
+    glow_f = glow.astype(np.float32)
+    tint_f = tint.astype(np.float32)
+
+    # mix base + glow (glow should be visible but not wash out)
+    combined = cv2.addWeighted(base_f, 0.7, glow_f, 0.4, 0.0)
+
+    # add tint softly
+    final_f = cv2.addWeighted(combined, 1.0, tint_f, 0.25, 0.0)
+
+    final = np.clip(final_f, 0, 255).astype(np.uint8)
     return _array_to_base64(final, fmt="JPEG")
+
     
 def detections_to_sitrep_txt(detections: List[Dict[str, Any]]) -> str:
     if not detections:
