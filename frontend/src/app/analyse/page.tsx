@@ -18,6 +18,8 @@ interface Detection {
   class: string;
   mapped_label: string;
   confidence: number;
+  forensic_confidence?: "HIGH" | "MEDIUM" | "LOW";
+  hallucinated?: boolean;
   bbox: [number, number, number, number];
 }
 
@@ -31,7 +33,10 @@ interface ApiResponse {
   sitrep_text: string;
   transmission: {
     mode: string;
+    type?: string;
     compression: string;
+    signal_strength?: string;
+    vector_sketch?: string;
   };
 }
 
@@ -266,7 +271,18 @@ export default function AnalysePage() {
             <div className="text-xs font-mono border border-sonar-600/30 bg-surface/60 backdrop-blur-sm p-4 rounded-xl space-y-2">
               <div className="text-sonar-400/80 uppercase tracking-widest text-[10px] mb-2">Transmission</div>
               <p className="text-gray-400">📡 {result.transmission.mode}</p>
+              {result.transmission.type && (
+                <p className="text-gray-400">🔗 {result.transmission.type}</p>
+              )}
               <p className="text-gray-400">⚡ {result.transmission.compression}</p>
+              {result.transmission.signal_strength && (
+                <p className="text-gray-400">📶 {result.transmission.signal_strength}</p>
+              )}
+              {result.transmission.vector_sketch && (
+                <p className="text-sonar-400/70 text-[10px] break-all">
+                  SKETCH: {result.transmission.vector_sketch.slice(0, 32)}…
+                </p>
+              )}
             </div>
           )}
         </div>
