@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Forensic Overlay</title>
+  <style>
+    /* ── Reset & base ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: transparent;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 13px;
+      color: #00ff88;
+      pointer-events: none;         /* overlay passes clicks through */
+      user-select: none;
+    }
+
+    /* ── Overlay container (fixed, full-viewport) ─────────────────── */
+    #fo-overlay {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      grid-template-areas:
+        "tl tr"
+        "bl br";
+      grid-template-rows: 1fr 1fr;
+      grid-template-columns: 1fr 1fr;
+      padding: 10px 14px;
+    }
+
+    /* ── Corner panels ────────────────────────────────────────────── */
+    .fo-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    #fo-tl { grid-area: tl; align-items: flex-start; justify-content: flex-start; }
+    #fo-tr { grid-area: tr; align-items: flex-end;   justify-content: flex-start; }
+    #fo-bl { grid-area: bl; align-items: flex-start; justify-content: flex-end; }
+    #fo-br { grid-area: br; align-items: flex-end;   justify-content: flex-end; }
+
+    /* ── Individual widgets ───────────────────────────────────────── */
+    .fo-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(0,255,136,0.25);
+      border-radius: 3px;
+      padding: 3px 8px;
+      white-space: nowrap;
+    }
+
+    /* Timestamp */
+    #fo-timestamp { letter-spacing: 1px; }
+
+    /* Recording indicator */
+    #fo-rec-dot {
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      background: #ff3333;
+      box-shadow: 0 0 6px #ff3333;
+      animation: fo-blink 1s step-start infinite;
+    }
+    #fo-rec-dot.fo-paused { animation: none; background: #888; box-shadow: none; }
+
+    @keyframes fo-blink { 50% { opacity: 0; } }
+
+    /* Threat badge */
+    #fo-threat {
+      font-weight: bold;
+      letter-spacing: 1px;
+      padding: 3px 10px;
+    }
+    #fo-threat[data-level="LOW"]      { color: #00ff88; border-color: #00ff88; }
+    #fo-threat[data-level="MEDIUM"]   { color: #ffd700; border-color: #ffd700; }
+    #fo-threat[data-level="HIGH"]     { color: #ff8800; border-color: #ff8800; }
+    #fo-threat[data-level="CRITICAL"] { color: #ff2222; border-color: #ff2222;
+                                        animation: fo-blink 0.6s step-start infinite; }
+  </style>
+</head>
+<body>
+
+<div id="fo-overlay">
+
+  <!-- TOP-LEFT: timestamp + GPS -->
+  <div id="fo-tl" class="fo-panel">
+    <div class="fo-row" id="fo-timestamp">--:--:-- UTC</div>
+    <div class="fo-row" id="fo-gps">GPS: --.------° / --.------°</div>
+    <div class="fo-row" id="fo-depth">DEPTH: -- m</div>
+  </div>
+
+  <!-- TOP-RIGHT: recording indicator -->
+  <div id="fo-tr" class="fo-panel">
+    <div class="fo-row">
+      <span id="fo-rec-dot"></span>
+      <span id="fo-rec-label">REC</span>
+    </div>
+  </div>
+
+  <!-- BOTTOM-LEFT: contact counter -->
+  <div id="fo-bl" class="fo-panel">
+    <div class="fo-row" id="fo-contacts">CONTACTS: 0</div>
+  </div>
+
+  <!-- BOTTOM-RIGHT: threat badge -->
+  <div id="fo-br" class="fo-panel">
+    <div class="fo-row" id="fo-threat" data-level="LOW">THREAT: LOW</div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ── Internal state ────────────────────────────────────────────── */
+  var state = {
+    recording : true,
+    lat        : null,
+    lon        : null,
+    depth_m    : null,
+    threat     : 'LOW',   // LOW | MEDIUM | HIGH | CRITICAL
+    contacts   : 0,
+  };
+
+  /* ── DOM refs ──────────────────────────────────────────────────── */
+  var elTs       = document.getElementById('fo-timestamp');
+  var elGps      = document.getElementById('fo-gps');
+  var elDepth    = document.getElementById('fo-depth');
+  var elRecDot   = document.getElementById('fo-rec-dot');
+  var elRecLabel = document.getElementById('fo-rec-label');
+  var elContacts = document.getElementById('fo-contacts');
+  var elThreat   = document.getElementById('fo-threat');
+
+  /* ── Helpers ───────────────────────────────────────────────────── */
+  function pad(n, w) { return String(n).padStart(w, '0'); }
+
+  function fmtDeg(val, pos, neg) {
+    if (val === null || val === undefined) return '--.------°';
+    return Math.abs(val).toFixed(6) + '° ' + (val >= 0 ? pos : neg);
+  }
+
+  /* ── Render loop ───────────────────────────────────────────────── */
+  function render() {
+    var now = new Date();
+    elTs.textContent = pad(now.getUTCHours(), 2)   + ':'
+                     + pad(now.getUTCMinutes(), 2)  + ':'
+                     + pad(now.getUTCSeconds(), 2)  + ' UTC';
+
+    elGps.textContent = 'GPS: ' + fmtDeg(state.lat, 'N', 'S')
+                      + ' / '   + fmtDeg(state.lon, 'E', 'W');
+
+    elDepth.textContent = 'DEPTH: '
+      + (state.depth_m !== null ? state.depth_m.toFixed(1) + ' m' : '-- m');
+
+    elRecDot.classList.toggle('fo-paused', !state.recording);
+    elRecLabel.textContent = state.recording ? 'REC' : 'PAUSED';
+
+    elContacts.textContent = 'CONTACTS: ' + state.contacts;
+
+    elThreat.textContent    = 'THREAT: ' + state.threat;
+    elThreat.dataset.level  = state.threat;
+  }
+
+  setInterval(render, 1000);
+  render();
+
+  /* ── Public API ────────────────────────────────────────────────── */
+  window.forensicOverlay = {
+    /**
+     * setGPS({ lat, lon })  – decimal degrees, WGS-84
+     */
+    setGPS: function (coords) {
+      state.lat = coords.lat;
+      state.lon = coords.lon;
+      render();
+    },
+
+    /**
+     * setDepth(meters)  – positive number
+     */
+    setDepth: function (m) {
+      state.depth_m = m;
+      render();
+    },
+
+    /**
+     * setThreat('LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL')
+     */
+    setThreat: function (level) {
+      state.threat = level;
+      render();
+    },
+
+    /**
+     * setContacts(n)  – integer count of tracked contacts
+     */
+    setContacts: function (n) {
+      state.contacts = n;
+      render();
+    },
+
+    /**
+     * setRecording(bool)
+     */
+    setRecording: function (active) {
+      state.recording = active;
+      render();
+    },
+
+    /** Returns a snapshot of current state */
+    getState: function () { return Object.assign({}, state); },
+  };
+}());
+</script>
+</body>
+</html>
