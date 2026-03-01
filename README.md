@@ -88,6 +88,9 @@ The GitHub Actions workflow (`.github/workflows/sync_to_hf.yml`) automatically p
 {
   "enhanced_image_base64": "<base64-string>",
   "heatmap_base64": "<base64-string>",
+  "sonar_base64": "<base64-string>",
+  "biolight_base64": "<base64-string>",
+  "boxed_image_base64": "<base64-string>",
   "detections": [
     {
       "class": "person",
@@ -96,6 +99,10 @@ The GitHub Actions workflow (`.github/workflows/sync_to_hf.yml`) automatically p
       "bbox": [x1, y1, x2, y2]
     }
   ],
-  "sitrep_text": "<Groq-generated situational report>"
+  "sitrep_text": "<Groq-generated situational report>",
+  "transmission": {
+    "mode": "AES-256 ENCRYPTED BURST",
+    "compression": "ZSTD-3 ADAPTIVE"
+  }
 }
 ```
