@@ -255,7 +255,7 @@ def build_boxed_image(rgb: np.ndarray, detections: list[dict]) -> str:
         x1, y1, x2, y2 = det["bbox"]
         conf = det["confidence"]
         label = det["mapped_label"]
-        # Colour based on confidence
+        # Color based on confidence
         if conf >= 0.75:
             color = (239, 68, 68)    # red – high threat
         elif conf >= 0.5:
