@@ -17,7 +17,14 @@ import logging
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from processing import enhance_image, run_detection, build_heatmap
+from processing import (
+    enhance_image,
+    run_detection,
+    build_heatmap,
+    build_sonar,
+    build_biolight,
+    build_boxed_image,
+)
 from sitrep import generate_sitrep
 
 logging.basicConfig(level=logging.INFO)
@@ -86,6 +93,9 @@ async def process_image(file: UploadFile = File(...)) -> dict:
         enhanced_b64, original_array = enhance_image(raw_bytes)
         detections = run_detection(original_array)
         heatmap_b64 = build_heatmap(original_array)
+        sonar_b64 = build_sonar(original_array)
+        biolight_b64 = build_biolight(original_array)
+        boxed_b64 = build_boxed_image(original_array, detections)
         sitrep = generate_sitrep(detections)
     except Exception as exc:
         logger.exception("Pipeline error: %s", exc)
@@ -94,6 +104,13 @@ async def process_image(file: UploadFile = File(...)) -> dict:
     return {
         "enhanced_image_base64": enhanced_b64,
         "heatmap_base64": heatmap_b64,
+        "sonar_base64": sonar_b64,
+        "biolight_base64": biolight_b64,
+        "boxed_image_base64": boxed_b64,
         "detections": detections,
         "sitrep_text": sitrep,
+        "transmission": {
+            "mode": "AES-256 ENCRYPTED BURST",
+            "compression": "ZSTD-3 ADAPTIVE",
+        },
     }
