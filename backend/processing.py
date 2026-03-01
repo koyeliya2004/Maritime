@@ -186,3 +186,86 @@ def build_heatmap(rgb: np.ndarray) -> str:
     overlay_rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
 
     return _array_to_base64(overlay_rgb, fmt="PNG")
+
+
+# ---------------------------------------------------------------------------
+# 4. Sonar-style visualisation
+# ---------------------------------------------------------------------------
+
+
+def build_sonar(rgb: np.ndarray) -> str:
+    """
+    Generate a sonar-style green monochrome radar visualisation.
+
+    Returns a base64-encoded PNG image.
+    """
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    # Apply edge detection for a "ping" look
+    edges = cv2.Canny(gray, 40, 120)
+    # Create green-channel sonar image
+    sonar = np.zeros((*gray.shape, 3), dtype=np.uint8)
+    sonar[:, :, 1] = cv2.addWeighted(gray, 0.5, edges, 0.5, 0)  # green channel
+    sonar[:, :, 0] = (gray * 0.1).astype(np.uint8)  # faint blue tint
+    # Add scan-line effect
+    for y in range(0, gray.shape[0], 3):
+        sonar[y, :, :] = (sonar[y, :, :].astype(np.float32) * 0.6).astype(np.uint8)
+    return _array_to_base64(sonar, fmt="PNG")
+
+
+# ---------------------------------------------------------------------------
+# 5. Bio-luminescence visualisation
+# ---------------------------------------------------------------------------
+
+
+def build_biolight(rgb: np.ndarray) -> str:
+    """
+    Generate a bio-luminescence style visualisation with deep-ocean
+    blue-teal glow effect.
+
+    Returns a base64-encoded PNG image.
+    """
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    # Invert for glow-on-dark effect
+    inv = cv2.bitwise_not(gray)
+    blurred = cv2.GaussianBlur(inv, (21, 21), 0)
+    # Build deep ocean colour: blue-teal palette
+    bio = np.zeros((*gray.shape, 3), dtype=np.uint8)
+    bio[:, :, 0] = (blurred * 0.3).astype(np.uint8)   # red (minimal)
+    bio[:, :, 1] = (blurred * 0.7).astype(np.uint8)   # green (teal)
+    bio[:, :, 2] = blurred                              # blue (dominant)
+    # Blend with dimmed original for context
+    dimmed = (rgb * 0.2).astype(np.uint8)
+    result = cv2.addWeighted(dimmed, 0.4, bio, 0.6, 0)
+    return _array_to_base64(result, fmt="PNG")
+
+
+# ---------------------------------------------------------------------------
+# 6. Boxed image (detection bounding boxes drawn on image)
+# ---------------------------------------------------------------------------
+
+
+def build_boxed_image(rgb: np.ndarray, detections: list[dict]) -> str:
+    """
+    Draw detection bounding boxes on the image.
+
+    Returns a base64-encoded PNG image.
+    """
+    img = rgb.copy()
+    for det in detections:
+        x1, y1, x2, y2 = det["bbox"]
+        conf = det["confidence"]
+        label = det["mapped_label"]
+        # Colour based on confidence
+        if conf >= 0.75:
+            color = (239, 68, 68)    # red – high threat
+        elif conf >= 0.5:
+            color = (245, 158, 11)   # amber – medium
+        else:
+            color = (34, 197, 94)    # green – low
+        cv2.rectangle(img, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
+        text = f"{label} {conf:.0%}"
+        (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+        cv2.rectangle(img, (int(x1), int(y1) - th - 8), (int(x1) + tw + 4, int(y1)), color, -1)
+        cv2.putText(img, text, (int(x1) + 2, int(y1) - 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+    return _array_to_base64(img, fmt="PNG")
