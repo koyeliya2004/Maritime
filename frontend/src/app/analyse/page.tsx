@@ -54,7 +54,8 @@ export default function AnalysePage() {
   const [originalPreview, setOriginalPreview] = useState<string | null>(null);
   const [result, setResult] = useState<ApiResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [mode, setMode] = useState<"normal" | "heatmap" | "sonar" | "bio">("normal");
+  const [mode, setMode] = useState<"normal" | "sonar" | "bio">("normal");
+  const [showHeatmap, setShowHeatmap] = useState(false);
 
   // -------------------------------------------------------------------
   // Upload handler
@@ -73,6 +74,7 @@ export default function AnalysePage() {
     setOriginalPreview(preview);
     setResult(null);
     setMode("normal");
+    setShowHeatmap(false);
     setIsLoading(true);
 
     const toastId = toast.loading("Analysing image…");
@@ -113,15 +115,15 @@ export default function AnalysePage() {
   // Image selection logic
   // -------------------------------------------------------------------
 
-  let displayImage: string | null = null;
-
-  if (result) {
-    if (mode === "heatmap" && result.heatmap_base64) displayImage = result.heatmap_base64;
-    else if (mode === "sonar" && result.sonar_base64) displayImage = result.sonar_base64;
-    else if (mode === "bio" && result.biolight_base64) displayImage = result.biolight_base64;
-    else if (result.boxed_image_base64) displayImage = result.boxed_image_base64;
-    else displayImage = result.enhanced_image_base64;
-  }
+  const displayImage = result
+    ? mode === "sonar"
+      ? result.sonar_base64
+      : mode === "bio"
+      ? result.biolight_base64
+      : showHeatmap
+      ? result.heatmap_base64
+      : result.enhanced_image_base64
+    : null;
 
   // -------------------------------------------------------------------
   // Render
@@ -194,7 +196,15 @@ export default function AnalysePage() {
             <div className="rounded-2xl overflow-hidden border border-sonar-600/30 shadow-xl shadow-black/20">
               <ReactCompareSlider
                 itemOne={<ReactCompareSliderImage src={originalPreview} alt="Original" />}
-                itemTwo={<ReactCompareSliderImage src={displayImage} alt="Processed" />}
+                itemTwo={<ReactCompareSliderImage src={displayImage} alt={
+                  mode === "sonar"
+                    ? "Sonar View"
+                    : mode === "bio"
+                    ? "Bioluminescence View"
+                    : showHeatmap
+                    ? "Forensic Heatmap"
+                    : "Enhanced"
+                } />}
                 style={{ height: 440 }}
               />
             </div>
@@ -205,12 +215,25 @@ export default function AnalysePage() {
             <div className="flex gap-2 flex-wrap items-center">
               {(["normal", "heatmap", "sonar", "bio"] as const).map((m) => {
                 const meta = MODE_META[m];
+                const isActive =
+                  m === "heatmap" ? showHeatmap :
+                  m === "normal"  ? mode === "normal" && !showHeatmap :
+                  mode === m;
+                const handleClick = () => {
+                  if (m === "heatmap") {
+                    setMode("normal");
+                    setShowHeatmap((v) => !v);
+                  } else {
+                    setMode(m as "normal" | "sonar" | "bio");
+                    setShowHeatmap(false);
+                  }
+                };
                 return (
                   <button
                     key={m}
-                    onClick={() => setMode(m)}
+                    onClick={handleClick}
                     className={`px-4 py-2.5 text-xs font-mono border rounded-lg transition-all duration-200 flex items-center gap-2
-                    ${mode === m
+                    ${isActive
                       ? "bg-sonar-400 text-white border-sonar-300 shadow-md shadow-sonar-400/20"
                       : "bg-surface/80 border-sonar-600/30 text-gray-400 hover:border-sonar-400/50 hover:text-sonar-200"}`}
                   >
