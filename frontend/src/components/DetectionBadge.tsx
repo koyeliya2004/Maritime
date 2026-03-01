@@ -4,15 +4,17 @@ interface Detection {
   class: string;
   mapped_label: string;
   confidence: number;
+  forensic_confidence?: "HIGH" | "MEDIUM" | "LOW";
+  hallucinated?: boolean;
   bbox: [number, number, number, number];
 }
 
 /**
  * DetectionBadge – displays a single detected object with its mapped label,
- * confidence, and bounding-box coordinates.
+ * confidence, forensic confidence score, hallucination flag, and bounding-box coordinates.
  */
 export function DetectionBadge({ detection }: { detection: Detection }) {
-  const { mapped_label, confidence, bbox } = detection;
+  const { mapped_label, confidence, forensic_confidence, hallucinated, bbox } = detection;
   const [x1, y1, x2, y2] = bbox;
 
   // Colour-code by confidence
@@ -22,6 +24,13 @@ export function DetectionBadge({ detection }: { detection: Detection }) {
       : confidence >= 0.5
       ? "border-threat-mid text-threat-mid"
       : "border-threat-low text-threat-low";
+
+  const forensicColor =
+    forensic_confidence === "HIGH"
+      ? "text-threat-low"
+      : forensic_confidence === "MEDIUM"
+      ? "text-threat-mid"
+      : "text-threat-high";
 
   return (
     <div
@@ -34,6 +43,14 @@ export function DetectionBadge({ detection }: { detection: Detection }) {
       <span className="text-gray-400">
         {(confidence * 100).toFixed(1)}% conf
       </span>
+      {forensic_confidence && (
+        <span className={`text-[10px] ${forensicColor}`}>
+          FORENSIC: {forensic_confidence}
+        </span>
+      )}
+      {hallucinated && (
+        <span className="text-[10px] text-yellow-400">⚠ AI-INFERRED</span>
+      )}
       <span className="text-gray-600 text-[10px]">
         [{x1},{y1}]→[{x2},{y2}]
       </span>

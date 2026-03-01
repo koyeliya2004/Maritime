@@ -8,7 +8,9 @@ Run:
 
 import base64
 import io
+import json
 import os
+import zlib
 
 import pytest
 from fastapi.testclient import TestClient
@@ -169,10 +171,11 @@ def test_process_jpeg_image():
 
 
 def _assert_valid_image_base64(b64_str: str) -> None:
-    """Assert that a plain base64 string decodes to a valid image."""
+    """Assert that a base64 string (plain or data-URI) decodes to a valid image."""
     assert isinstance(b64_str, str)
     assert len(b64_str) > 0
-    decoded = base64.b64decode(b64_str)
+    raw = b64_str.split(",", 1)[1] if b64_str.startswith("data:") else b64_str
+    decoded = base64.b64decode(raw)
     assert len(decoded) > 0
     img = Image.open(io.BytesIO(decoded))
     assert img.size[0] > 0
@@ -219,7 +222,7 @@ def test_process_returns_boxed_image_base64():
 
 
 def test_process_returns_transmission_status():
-    """Response must contain transmission dict with correct types (new HuggingFace backend feature)."""
+    """Response must contain transmission dict with correct types (Whisper-Link feature)."""
     png = _make_png_bytes()
     response = client.post(
         "/process",
@@ -234,6 +237,23 @@ def test_process_returns_transmission_status():
     assert isinstance(tx.get("type"), str)
     assert isinstance(tx.get("compression"), str)
     assert isinstance(tx.get("signal_strength"), str)
+    assert isinstance(tx.get("vector_sketch"), str)
+    assert len(tx["vector_sketch"]) > 0
+
+
+def test_process_transmission_contains_vector_sketch():
+    """Whisper-Link: transmission.vector_sketch must be a non-empty base64-zlib string."""
+    png = _make_png_bytes()
+    response = client.post(
+        "/process",
+        files={"file": ("test.png", png, "image/png")},
+    )
+    assert response.status_code == 200
+    sketch_b64 = response.json()["transmission"]["vector_sketch"]
+    # Must be valid base64 that decompresses to JSON
+    decompressed = zlib.decompress(base64.b64decode(sketch_b64))
+    parsed = json.loads(decompressed)
+    assert "detections" in parsed or "summary" in parsed
 
 
 def test_process_returns_system_status():
@@ -254,3 +274,20 @@ def test_process_returns_system_status():
     assert status["detection"] == "ACTIVE"
     assert status["enhancement"] == "ACTIVE"
     assert status["threat_level"] in ("LOW", "MEDIUM", "HIGH")
+
+
+def test_process_detections_forensic_fields():
+    """Forensic confidence scoring: each detection must include forensic_confidence and hallucinated."""
+    png = _make_png_bytes()
+    response = client.post(
+        "/process",
+        files={"file": ("test.png", png, "image/png")},
+    )
+    assert response.status_code == 200
+    detections = response.json()["detections"]
+    assert isinstance(detections, list)
+    for det in detections:
+        assert "forensic_confidence" in det, "Missing forensic_confidence field"
+        assert det["forensic_confidence"] in ("HIGH", "MEDIUM", "LOW")
+        assert "hallucinated" in det, "Missing hallucinated field"
+        assert isinstance(det["hallucinated"], bool)
