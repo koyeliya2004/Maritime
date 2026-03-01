@@ -1,74 +1,37 @@
-# .github/workflows/sync_to_hf.yml
-#
-# Syncs ONLY the /backend directory to a Hugging Face Space on every push to main.
-# Also copies the repository README into the Space so the README is kept in sync.
-#
-# Required repository secrets:
-#   HF_TOKEN  – Hugging Face write token (https://huggingface.co/settings/tokens)
-#   HF_SPACE  – Space repo ID, e.g. "your-username/sub-sentinel"
-#
-# The frontend is NEVER included in the push.
-
-name: Sync backend to Hugging Face Space
+name: Sync HuggingFace Backend
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "backend/**"
-      - "README.md"    # include README changes as a trigger (optional)
-      - "README"       # handle README without extension as well (optional)
+workflow_dispatch:
+schedule:
+- cron: "0 0 * * *"
 
 jobs:
-  sync:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # full history needed for subtree operations
+sync:
+runs-on: ubuntu-latest
 
-      - name: Configure Git identity
-        run: |
-          git config user.email "ci-bot@sub-sentinel"
-          git config user.name  "SUB-SENTINEL CI Bot"
+```
+steps:
+  - name: Checkout Repo
+    uses: actions/checkout@v4
 
-      - name: Build and push backend + README to Hugging Face Space
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_SPACE: ${{ secrets.HF_SPACE }}
-        run: |
-          # Create a clean temporary directory to assemble the Space contents
-          TMPDIR=$(mktemp -d)
-          echo "Preparing deploy tree in $TMPDIR"
+  - name: Clone HF Space
+    run: |
+      git clone https://huggingface.co/spaces/Arko007/maritime hf-backend
 
-          # Copy backend contents (only tracked files from working tree)
-          rsync -a --delete backend/ "$TMPDIR/"
+  - name: Replace backend folder
+    run: |
+      rm -rf backend/*
+      cp -r hf-backend/* backend/
 
-          # Copy README if present in repository root (handle README.md and README)
-          if [ -f README.md ]; then
-            cp README.md "$TMPDIR/README.md"
-          fi
+  - name: Clean .git
+    run: |
+      rm -rf backend/.git
 
-          if [ -f README ] && [ ! -f "$TMPDIR/README" ]; then
-            cp README "$TMPDIR/README"
-          fi
-
-          # Enter temp dir, init git and push to HF Space as its main branch
-          pushd "$TMPDIR"
-          git init
-          git checkout -b main || true
-          git config user.email "ci-bot@sub-sentinel"
-          git config user.name  "SUB-SENTINEL CI Bot"
-
-          git add --all
-          git commit -m "Deploy backend and README from ${GITHUB_SHA} [ci skip]" || true
-
-          # Add HF remote and push
-          git remote add hf "https://user:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}"
-          git push hf main:main --force
-
-          popd
+  - name: Commit & Push
+    run: |
+      git config --global user.name "github-actions"
+      git config --global user.email "actions@github.com"
+      git add backend
+      git commit -m "Auto sync backend from HF" || echo "No changes"
+      git push
+```
