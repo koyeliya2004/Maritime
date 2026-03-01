@@ -9,6 +9,7 @@ import Link from "next/link";
 import { SonarLoader } from "@/components/SonarLoader";
 import { TelemetryPanel } from "@/components/TelemetryPanel";
 import { DetectionBadge } from "@/components/DetectionBadge";
+import { OceanBackground } from "@/components/OceanBackground";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -133,15 +134,7 @@ export default function AnalysePage() {
     <main className="min-h-screen bg-panel text-gray-100 flex flex-col relative overflow-hidden">
 
       {/* Underwater ambient background */}
-      <div className="pointer-events-none fixed inset-0 z-0">
-        <div className="absolute inset-0 bg-gradient-to-b from-[#020a18] via-[#051630] to-[#0a0f1a]" />
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-sonar-500/5 rounded-full blur-[120px]" />
-        <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-blue-600/5 rounded-full blur-[100px]" />
-        {/* Subtle bubbles */}
-        <div className="bubble bubble-1" />
-        <div className="bubble bubble-2" />
-        <div className="bubble bubble-3" />
-      </div>
+      <OceanBackground />
 
       {/* Header */}
       <header className="relative z-10 border-b border-sonar-600/30 bg-panel/80 backdrop-blur-md px-6 py-4 flex items-center gap-4">

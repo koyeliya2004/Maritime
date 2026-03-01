@@ -69,3 +69,177 @@ html { scroll-behavior: smooth; }
   90%  { opacity: 0.3; }
   100% { transform: translateY(-100vh) translateX(30px); opacity: 0; }
 }
+
+/* Extra bubble variants */
+.bubble-6 { width: 9px;  height: 9px;  left: 20%; bottom: -20px; animation-duration: 17s; animation-delay: 2s; }
+.bubble-7 { width: 14px; height: 14px; left: 70%; bottom: -20px; animation-duration: 19s; animation-delay: 4s; }
+.bubble-8 { width: 7px;  height: 7px;  left: 55%; bottom: -20px; animation-duration: 21s; animation-delay: 9s; }
+
+/* ---------------------------------------------------------------------------
+   Ocean wave layers
+   --------------------------------------------------------------------------- */
+
+.ocean-wave {
+  position: absolute;
+  top: 0;
+  left: -50%;
+  width: 200%;
+  height: 60px;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 161, 255, 0.03) 25%,
+    transparent 50%
+  );
+  border-bottom: 1px solid rgba(0, 161, 255, 0.06);
+  animation: wave-drift linear infinite;
+}
+
+.ocean-wave--1 {
+  top: 0;
+  height: 50px;
+  animation-duration: 18s;
+  opacity: 0.7;
+}
+.ocean-wave--2 {
+  top: 30px;
+  height: 40px;
+  animation-duration: 24s;
+  animation-direction: reverse;
+  opacity: 0.5;
+}
+.ocean-wave--3 {
+  top: 55px;
+  height: 35px;
+  animation-duration: 30s;
+  opacity: 0.35;
+}
+
+@keyframes wave-drift {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(50%); }
+}
+
+/* ---------------------------------------------------------------------------
+   Light rays from surface
+   --------------------------------------------------------------------------- */
+
+.ocean-light-rays {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 55%;
+  background:
+    linear-gradient(170deg, rgba(0,161,255,0.04) 0%, transparent 40%),
+    linear-gradient(190deg, rgba(0,161,255,0.03) 0%, transparent 35%),
+    linear-gradient(160deg, rgba(0,200,255,0.02) 0%, transparent 45%);
+  animation: light-ray-shimmer 8s ease-in-out infinite alternate;
+}
+
+@keyframes light-ray-shimmer {
+  0%   { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+/* ---------------------------------------------------------------------------
+   Submarine
+   --------------------------------------------------------------------------- */
+
+.ocean-submarine {
+  position: absolute;
+  width: clamp(100px, 14vw, 200px);
+  height: auto;
+  aspect-ratio: 220 / 80;
+  top: 30%;
+  animation: submarine-drift 40s ease-in-out infinite;
+  opacity: 0.45;
+  filter: drop-shadow(0 0 12px rgba(0,161,255,0.15));
+}
+
+@keyframes submarine-drift {
+  0%   { left: -16%; top: 30%; transform: scaleX(1)  translateY(0); }
+  48%  { left: 100%; top: 34%; transform: scaleX(1)  translateY(-15px); }
+  50%  { left: 100%; top: 34%; transform: scaleX(-1) translateY(-15px); }
+  98%  { left: -16%; top: 28%; transform: scaleX(-1) translateY(10px); }
+  100% { left: -16%; top: 30%; transform: scaleX(1)  translateY(0); }
+}
+
+/* ---------------------------------------------------------------------------
+   Scuba diver
+   --------------------------------------------------------------------------- */
+
+.ocean-diver {
+  position: absolute;
+  width: clamp(40px, 5vw, 70px);
+  height: auto;
+  aspect-ratio: 1;
+  top: 55%;
+  animation: diver-swim 34s ease-in-out infinite;
+  opacity: 0.35;
+  filter: drop-shadow(0 0 8px rgba(0,161,255,0.1));
+}
+
+@keyframes diver-swim {
+  0%   { right: -8%;  top: 55%; transform: scaleX(-1) rotate(-5deg); }
+  25%  { right: 40%;  top: 50%; transform: scaleX(-1) rotate(3deg); }
+  48%  { right: 105%; top: 52%; transform: scaleX(-1) rotate(-2deg); }
+  50%  { right: 105%; top: 52%; transform: scaleX(1)  rotate(2deg); }
+  75%  { right: 50%;  top: 58%; transform: scaleX(1)  rotate(-4deg); }
+  98%  { right: -8%;  top: 54%; transform: scaleX(1)  rotate(1deg); }
+  100% { right: -8%;  top: 55%; transform: scaleX(-1) rotate(-5deg); }
+}
+
+/* ---------------------------------------------------------------------------
+   Ocean particles / plankton
+   --------------------------------------------------------------------------- */
+
+.ocean-particle {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(0, 161, 255, 0.15);
+  animation: particle-float linear infinite;
+}
+
+.ocean-particle--1 { width: 3px; height: 3px; left: 15%; top: 40%; animation-duration: 12s; }
+.ocean-particle--2 { width: 2px; height: 2px; left: 35%; top: 60%; animation-duration: 16s; animation-delay: 2s; }
+.ocean-particle--3 { width: 4px; height: 4px; left: 55%; top: 25%; animation-duration: 14s; animation-delay: 5s; }
+.ocean-particle--4 { width: 2px; height: 2px; left: 75%; top: 70%; animation-duration: 18s; animation-delay: 1s; }
+.ocean-particle--5 { width: 3px; height: 3px; left: 90%; top: 45%; animation-duration: 15s; animation-delay: 7s; }
+.ocean-particle--6 { width: 2px; height: 2px; left: 50%; top: 80%; animation-duration: 20s; animation-delay: 3s; }
+
+@keyframes particle-float {
+  0%   { transform: translate(0, 0); opacity: 0; }
+  15%  { opacity: 0.6; }
+  50%  { transform: translate(20px, -40px); opacity: 0.3; }
+  85%  { opacity: 0.5; }
+  100% { transform: translate(-15px, 30px); opacity: 0; }
+}
+
+/* ---------------------------------------------------------------------------
+   Mobile responsiveness for ocean elements
+   --------------------------------------------------------------------------- */
+
+@media (max-width: 640px) {
+  .ocean-submarine {
+    width: 90px;
+    top: 25%;
+    opacity: 0.3;
+  }
+
+  .ocean-diver {
+    width: 36px;
+    top: 50%;
+    opacity: 0.25;
+  }
+
+  .ocean-wave {
+    height: 30px;
+  }
+  .ocean-wave--2 { top: 18px; }
+  .ocean-wave--3 { top: 32px; }
+
+  .ocean-light-rays {
+    height: 40%;
+  }
+}

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { OceanBackground } from "@/components/OceanBackground";
 
 // ---------------------------------------------------------------------------
 // Feature cards data
@@ -46,18 +47,7 @@ export default function Home() {
     <main className="min-h-screen bg-panel text-gray-100 relative overflow-hidden">
 
       {/* Underwater ambient background */}
-      <div className="pointer-events-none fixed inset-0 z-0">
-        <div className="absolute inset-0 bg-gradient-to-b from-[#010812] via-[#041228] to-[#0a1a35]" />
-        <div className="absolute top-20 left-1/3 w-[500px] h-[500px] bg-sonar-400/4 rounded-full blur-[150px]" />
-        <div className="absolute bottom-20 right-1/4 w-[400px] h-[400px] bg-blue-500/5 rounded-full blur-[120px]" />
-        <div className="absolute top-1/2 left-10 w-[300px] h-[300px] bg-cyan-500/3 rounded-full blur-[100px]" />
-        {/* Animated bubbles */}
-        <div className="bubble bubble-1" />
-        <div className="bubble bubble-2" />
-        <div className="bubble bubble-3" />
-        <div className="bubble bubble-4" />
-        <div className="bubble bubble-5" />
-      </div>
+      <OceanBackground />
 
       {/* Navigation */}
       <nav className="relative z-10 border-b border-sonar-600/20 bg-panel/60 backdrop-blur-xl">
