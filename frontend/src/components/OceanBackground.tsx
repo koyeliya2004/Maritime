@@ -21,70 +21,145 @@
 function SubmarineSVG() {
   return (
     <svg
-      width="320"
-      height="110"
-      viewBox="0 0 320 110"
+      width="380"
+      height="128"
+      viewBox="0 0 380 128"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      style={{ display: "block" }}
+      style={{ display: "block", filter: "drop-shadow(0 0 14px rgba(0,161,255,0.35))" }}
     >
-      {/* Hull */}
-      <ellipse cx="148" cy="68" rx="132" ry="30" fill="#0b2240" />
-      {/* Bow dome */}
-      <ellipse cx="272" cy="68" rx="18" ry="14" fill="#0d2a50" stroke="#00a1ff" strokeWidth="1" />
-      {/* Hull highlight stripe */}
-      <ellipse cx="148" cy="55" rx="118" ry="10" fill="#0d2a50" opacity="0.5" />
-      {/* Stern cap */}
-      <ellipse cx="22" cy="68" rx="12" ry="18" fill="#091828" />
+      {/* Outer glow halo */}
+      <ellipse cx="178" cy="82" rx="160" ry="44" fill="rgba(0,80,160,0.10)" />
 
-      {/* Conning tower / sail */}
-      <rect x="108" y="30" width="62" height="38" rx="7" fill="#091828" />
-      <rect x="116" y="20" width="44" height="20" rx="5" fill="#071420" />
-      {/* Periscope */}
-      <rect x="134" y="5" width="5" height="20" rx="2.5" fill="#091828" />
-      <rect x="120" y="7" width="22" height="5" rx="2.5" fill="#091828" />
-      {/* Antenna */}
-      <rect x="154" y="10" width="3" height="14" rx="1.5" fill="#091828" />
+      {/* Main hull */}
+      <ellipse cx="172" cy="80" rx="152" ry="32" fill="#0a1e3a" />
+      {/* Hull highlight stripe */}
+      <ellipse cx="162" cy="66" rx="138" ry="11" fill="#0d2a50" opacity="0.55" />
+      {/* Lower hull shadow */}
+      <ellipse cx="172" cy="94" rx="145" ry="14" fill="#060f1a" opacity="0.35" />
+
+      {/* Bow (tapered, pointed) */}
+      <path d="M316,80 Q356,58 364,80 Q356,102 316,80Z" fill="#0d2a50" />
+      <ellipse cx="358" cy="80" rx="9" ry="9" fill="#0d2a50" stroke="#00a1ff" strokeWidth="0.8" />
+
+      {/* Stern cap */}
+      <ellipse cx="24" cy="80" rx="14" ry="22" fill="#071420" />
+
+      {/* Conning tower */}
+      <rect x="128" y="38" width="68" height="42" rx="8" fill="#071420" />
+      <rect x="138" y="26" width="48" height="22" rx="6" fill="#060f1a" />
+      {/* Conning tower highlight */}
+      <rect x="140" y="28" width="44" height="6" rx="3" fill="#0d2a50" opacity="0.4" />
+
+      {/* Periscope arm */}
+      <rect x="157" y="5" width="5" height="26" rx="2.5" fill="#060f1a" />
+      <rect x="144" y="7" width="24" height="5" rx="2.5" fill="#060f1a" />
+      <circle cx="144" cy="9.5" r="4" fill="#00a1ff" opacity="0.55" />
+
+      {/* Antenna with blinking light */}
+      <rect x="178" y="9" width="3" height="18" rx="1.5" fill="#060f1a" />
+      <circle cx="179" cy="9" r="2.5" fill="#ff4400" className="antenna-light" />
 
       {/* Forward dive planes */}
-      <path d="M238,56 L260,36 L270,54 Z" fill="#091828" />
-      <path d="M238,80 L260,100 L270,82 Z" fill="#091828" />
+      <path d="M290,66 L316,44 L328,64 Z" fill="#071420" />
+      <path d="M290,94 L316,116 L328,96 Z" fill="#071420" />
 
-      {/* Stern dive planes / rudder */}
-      <path d="M28,55 L8,34 L22,54 Z" fill="#091828" />
-      <path d="M28,81 L8,102 L22,82 Z" fill="#091828" />
+      {/* Stern dive planes */}
+      <path d="M34,64 L12,42 L26,64 Z" fill="#071420" />
+      <path d="M34,96 L12,118 L26,96 Z" fill="#071420" />
 
-      {/* Propeller blades */}
-      <ellipse cx="22" cy="68" rx="5" ry="22" fill="#091828" opacity="0.8" transform="rotate(15 22 68)" />
-      <ellipse cx="22" cy="68" rx="5" ry="22" fill="#091828" opacity="0.8" transform="rotate(-15 22 68)" />
-      <ellipse cx="22" cy="68" rx="22" ry="5" fill="#091828" opacity="0.7" />
-      <circle cx="22" cy="68" r="6" fill="#0d2a50" />
+      {/* Torpedo tubes (bow) */}
+      <rect x="344" y="72" width="20" height="7" rx="3.5" fill="#060f1a" stroke="#00a1ff" strokeWidth="0.6" />
+      <rect x="344" y="84" width="20" height="7" rx="3.5" fill="#060f1a" stroke="#00a1ff" strokeWidth="0.6" />
 
       {/* Portholes */}
-      <circle cx="88"  cy="66" r="9" fill="#050f1e" stroke="#00a1ff" strokeWidth="1.5" />
-      <circle cx="88"  cy="66" r="5" fill="#020810" />
-      <circle cx="90"  cy="64" r="2" fill="#00a1ff" opacity="0.45" />
+      <circle cx="102" cy="78" r="10" fill="#050f1e" stroke="#00a1ff" strokeWidth="1.5" />
+      <circle cx="102" cy="78" r="6"  fill="#020810" />
+      <circle cx="104" cy="76" r="2.5" fill="#00a1ff" opacity="0.5" />
 
-      <circle cx="148" cy="66" r="9" fill="#050f1e" stroke="#00a1ff" strokeWidth="1.5" />
-      <circle cx="148" cy="66" r="5" fill="#020810" />
-      <circle cx="150" cy="64" r="2" fill="#00a1ff" opacity="0.45" />
+      <circle cx="176" cy="78" r="10" fill="#050f1e" stroke="#00a1ff" strokeWidth="1.5" />
+      <circle cx="176" cy="78" r="6"  fill="#020810" />
+      <circle cx="178" cy="76" r="2.5" fill="#00a1ff" opacity="0.5" />
 
-      <circle cx="208" cy="66" r="9" fill="#050f1e" stroke="#00a1ff" strokeWidth="1.5" />
-      <circle cx="208" cy="66" r="5" fill="#020810" />
-      <circle cx="210" cy="64" r="2" fill="#00a1ff" opacity="0.45" />
+      <circle cx="250" cy="78" r="10" fill="#050f1e" stroke="#00a1ff" strokeWidth="1.5" />
+      <circle cx="250" cy="78" r="6"  fill="#020810" />
+      <circle cx="252" cy="76" r="2.5" fill="#00a1ff" opacity="0.5" />
 
       {/* Running lights */}
-      <circle cx="264" cy="60" r="4" fill="#00ff88" opacity="0.85" />
-      <circle cx="264" cy="76" r="4" fill="#ff3300" opacity="0.85" />
+      <circle cx="350" cy="70" r="5" fill="#00ff88" opacity="0.9" />
+      <circle cx="350" cy="90" r="5" fill="#ff3300" opacity="0.9" />
 
-      {/* Hull detail lines */}
-      <line x1="42" y1="56" x2="250" y2="56" stroke="#0d2a50" strokeWidth="0.8" opacity="0.6" />
-      <line x1="42" y1="80" x2="250" y2="80" stroke="#0d2a50" strokeWidth="0.8" opacity="0.6" />
+      {/* Hull seam lines */}
+      <line x1="48" y1="66" x2="310" y2="66" stroke="#0d2a50" strokeWidth="0.8" opacity="0.5" />
+      <line x1="48" y1="94" x2="310" y2="94" stroke="#0d2a50" strokeWidth="0.8" opacity="0.5" />
 
-      {/* Hatches on top */}
-      <ellipse cx="88"  cy="47" rx="15" ry="5" fill="#071420" stroke="#0d2a50" strokeWidth="1" />
-      <ellipse cx="178" cy="47" rx="15" ry="5" fill="#071420" stroke="#0d2a50" strokeWidth="1" />
+      {/* Deck hatches */}
+      <ellipse cx="102" cy="54" rx="16" ry="5" fill="#071420" stroke="#0d2a50" strokeWidth="1" />
+      <ellipse cx="204" cy="54" rx="16" ry="5" fill="#071420" stroke="#0d2a50" strokeWidth="1" />
+
+      {/* Propeller hub */}
+      <circle cx="24" cy="80" r="8" fill="#0d2a50" />
+
+      {/* Propeller blades – spinning via CSS */}
+      <g className="sub-propeller">
+        <ellipse cx="24" cy="80" rx="6" ry="24" fill="#091828" opacity="0.85" />
+        <ellipse cx="24" cy="80" rx="6" ry="24" fill="#091828" opacity="0.85" transform="rotate(60 24 80)" />
+        <ellipse cx="24" cy="80" rx="6" ry="24" fill="#091828" opacity="0.85" transform="rotate(120 24 80)" />
+        <circle cx="24" cy="80" r="5" fill="#0d2a50" />
+        <circle cx="24" cy="80" r="2.5" fill="#091828" />
+      </g>
     </svg>
+  );
+}
+
+/* ─── Water surface (top of scene, underwater view) ─────────────────────── */
+
+function WaterSurface() {
+  return (
+    <div
+      className="absolute top-0 left-0 w-full pointer-events-none overflow-hidden"
+      style={{ height: "90px" }}
+    >
+      {/* Light refraction gradient */}
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "90px",
+          background: "linear-gradient(to bottom, rgba(0,120,220,0.22), transparent)",
+        }}
+      />
+      {/* Wave 1 – slow */}
+      <div className="water-surface water-surface-1">
+        <svg
+          viewBox="0 0 2880 56"
+          preserveAspectRatio="none"
+          xmlns="http://www.w3.org/2000/svg"
+          style={{ display: "block", width: "100%", height: "56px" }}
+        >
+          <path
+            d="M0,20 C90,4 270,36 360,20 C450,4 630,36 720,20 C810,4 990,36 1080,20 C1170,4 1350,36 1440,20 C1530,4 1710,36 1800,20 C1890,4 2070,36 2160,20 C2250,4 2430,36 2520,20 C2610,4 2790,36 2880,20 L2880,0 L0,0 Z"
+            fill="rgba(0,130,230,0.28)"
+          />
+        </svg>
+      </div>
+      {/* Wave 2 – faster, reverse */}
+      <div className="water-surface water-surface-2">
+        <svg
+          viewBox="0 0 2880 40"
+          preserveAspectRatio="none"
+          xmlns="http://www.w3.org/2000/svg"
+          style={{ display: "block", width: "100%", height: "40px" }}
+        >
+          <path
+            d="M0,14 C120,4 360,24 480,14 C600,4 840,24 960,14 C1080,4 1320,24 1440,14 C1560,4 1800,24 1920,14 C2040,4 2280,24 2400,14 C2520,4 2760,24 2880,14 L2880,0 L0,0 Z"
+            fill="rgba(0,100,200,0.16)"
+          />
+        </svg>
+      </div>
+    </div>
   );
 }
 
@@ -215,6 +290,9 @@ export function OceanBackground() {
       {/* Base gradient */}
       <div className="absolute inset-0 bg-gradient-to-b from-[#010812] via-[#021325] to-[#04101e]" />
 
+      {/* Water surface – animated waves at the top of the scene */}
+      <WaterSurface />
+
       {/* Surface light shafts */}
       <div
         className="absolute top-0 left-[22%] w-3 bg-gradient-to-b from-cyan-400/[0.07] to-transparent blur-2xl"
@@ -267,6 +345,9 @@ export function OceanBackground() {
           <div className="sub-bubble sub-bubble-1" />
           <div className="sub-bubble sub-bubble-2" />
           <div className="sub-bubble sub-bubble-3" />
+          <div className="sub-bubble sub-bubble-4" />
+          <div className="sub-bubble sub-bubble-5" />
+          <div className="sub-bubble sub-bubble-6" />
         </div>
       </div>
 
