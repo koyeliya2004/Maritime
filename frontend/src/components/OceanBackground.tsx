@@ -287,8 +287,20 @@ export function OceanBackground() {
   return (
     <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
 
-      {/* Base gradient */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#010812] via-[#021325] to-[#04101e]" />
+      {/* Cinematic deep-ocean video background – looping, muted, auto-play */}
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        aria-label="Deep ocean background video"
+        className="absolute inset-0 w-full h-full object-cover opacity-75"
+      >
+        <source src="/ocean-background.mp4" type="video/mp4" />
+      </video>
+
+      {/* Dark overlay to preserve readability of UI elements above */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#010812]/60 via-[#021325]/40 to-[#04101e]/60" />
 
       {/* Water surface – animated waves at the top of the scene */}
       <WaterSurface />
